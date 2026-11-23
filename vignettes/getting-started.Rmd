@@ -1,0 +1,248 @@
+---
+title: "Getting Started with airgapllm: Air-Gapped Local AI Workflows in R"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with airgapllm: Air-Gapped Local AI Workflows in R}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+Clinical, behavioral, educational, and medical researchers routinely analyze
+rich unstructured text—therapy progress notes, EMA journals, student writing,
+and patient narratives—that **cannot be transmitted to external cloud LLM APIs**
+under IRB, HIPAA, or FERPA data-use agreements.
+
+`airgapllm` provides a complete, privacy-first R workbench for **verifiably
+offline local LLM workflows**:
+
+1. **Air-Gapped Container Lifecycle Manager**: Generate pinned, hardened Docker
+   (`--network none`, `--read-only`, `--cap-drop ALL`) and HPC Apptainer `.def`
+   configurations for `Ollama`, `llama.cpp`, and `vLLM`, verify local model
+   weight SHA-256 digests, and run automated pre-flight isolation checks.
+2. **Pre-Inference Privacy & PII Engine**: Detect, redact, or reversibly
+   pseudonymize (HMAC-SHA256 + AES-256-CBC encrypted vault) direct identifiers
+   in pure R before any text reaches the model.
+3. **Crash-Resumable Schema-Enforced Batch Extractor**: Extract strictly typed
+   tibbles from R data frames with automated repair retries for malformed
+   outputs and atomic per-row JSONL checkpointing.
+4. **Immutable Audit Trail & IRB Protocol Generator**: Maintain tamper-evident
+   SHA-256 hash-chained JSONL logs (strictly barring raw text/PII) and generate
+   ready-to-paste IRB/HIPAA Methods boilerplate.
+
+Everything in this vignette runs 100% offline using the built-in deterministic
+`runtime_mock()`, while producing the exact container configurations, schemas,
+checkpoints, audit logs, and IRB narratives used in production on local GPU
+workstations and HPC nodes.
+
+```{r load}
+library(airgapllm)
+library(tibble)
+```
+
+## Step 1: Define a Hardened Air-Gapped Container Specification
+
+Pin your local inference container by exact SHA-256 image digest and local
+model weight digest:
+
+```{r container-spec}
+# Create a synthetic local GGUF model weight file for this demonstration
+tmp_dir <- tempfile("airgap_models_")
+dir.create(tmp_dir)
+model_file <- file.path(tmp_dir, "llama-3.1-8b-instruct-q4_K_M.gguf")
+writeBin(charToRaw("demo-local-open-weights-binary-v1"), model_file)
+
+# Compute and verify streaming SHA-256 digest of the local weights
+model_ver <- verify_model_digest(model_file)
+model_ver
+
+# Define a hardened, digest-pinned container spec
+spec <- airgap_container_spec(
+  backend = "llama.cpp",
+  image = "ghcr.io/ggerganov/llama.cpp",
+  image_digest = paste0("sha256:", strrep("a", 64)),
+  model_dir = tmp_dir,
+  model_file = basename(model_file),
+  model_digest = model_ver$actual_digest,
+  gpu = "nvidia",
+  memory_limit = "24g",
+  user = "1000:1000"
+)
+spec
+```
+
+Generate reproducible deployment artifacts for either a lab workstation
+(`emit_docker_run()`, `emit_docker_compose()`) or a university HPC GPU cluster
+(`emit_apptainer_def()`):
+
+```{r emit-configs}
+cat(emit_docker_run(spec), "\n")
+```
+
+```{r emit-apptainer}
+cat(emit_apptainer_def(spec), "\n")
+```
+
+Run an automated pre-flight isolation and weight-integrity check before
+touching any participant data:
+
+```{r preflight}
+pf <- preflight_isolation_check(
+  spec = spec,
+  endpoint = "http://127.0.0.1:8080/v1",
+  model_path = model_file
+)
+pf
+```
+
+Notice that any attempt to connect to a remote cloud API or non-loopback host
+is rejected immediately:
+
+```{r remote-rejected}
+is_loopback_endpoint("http://127.0.0.1:8080/v1")
+is_loopback_endpoint("https://api.openai.com/v1")
+```
+
+## Step 2: Inspect Pre-Run PII Coverage
+
+Consider a small synthetic batch of clinical session notes containing direct
+identifiers:
+
+```{r sample-data}
+notes <- tibble(
+  note_id = sprintf("NOTE_%02d", 1:6),
+  note_text = c(
+    "Patient: Jane Doe (MRN: 884210) reported mild sleep disruption on 2026-03-14.",
+    "Dr. Robert Vance emailed follow-up plan to jane.doe@clinic.org; anxiety reduced.",
+    "Emergency contact phone (555) 234-5678 verified; no acute crisis indicators.",
+    "DOB: 1989-11-02; lives at 742 Evergreen Terrace, Hartford, CT 06103. Mood stable.",
+    "Student ID: STU-44102 completed coping exercises after Cognitive Behavioral Therapy.",
+    "Progress note with zero personal identifiers; affect calm and engaged."
+  )
+)
+
+# Aggregate privacy coverage report (strictly zero raw PII stored or printed)
+pii_privacy_report(notes, text_col = "note_text")
+```
+
+## Step 3: Declare a Strict Typed Extraction Schema
+
+Define the exact R column types, enum levels, numeric bounds, and nullability
+rules for downstream statistical analysis:
+
+```{r schema}
+clinical_schema <- extraction_schema(
+  sentiment = schema_field(
+    "enum",
+    values = c("positive", "neutral", "negative"),
+    description = "Overall emotional tone of the session note"
+  ),
+  severity = schema_field(
+    "integer",
+    min = 0L,
+    max = 10L,
+    description = "Clinical symptom severity rating from 0 to 10"
+  ),
+  confidence = schema_field(
+    "numeric",
+    min = 0,
+    max = 1,
+    nullable = TRUE,
+    description = "Model extraction confidence score"
+  ),
+  crisis_flag = schema_field(
+    "logical",
+    description = "TRUE if acute safety or crisis risk is indicated"
+  ),
+  name = "clinical_session_coding"
+)
+clinical_schema
+```
+
+## Step 4: Execute Crash-Resumable, Schema-Enforced Batch Extraction
+
+Now run `airgap_extract()` with:
+
+- Mandatory pre-inference PII redaction (`pii_policy = "redact"`),
+- Simulated malformed JSON on `NOTE_02` to demonstrate automatic structured
+  repair retries,
+- Atomic row-level checkpointing (`checkpoint_path`), and
+- Automatic hash-chained IRB/HIPAA audit logging (`audit_log_path`).
+
+In production on a local GPU workstation, swap `runtime_mock()` for
+`runtime_ollama("llama3.1:8b-instruct-q4_K_M")` or
+`runtime_openai_local("llama-3.1-8b", base_url = "http://127.0.0.1:8080/v1")`.
+
+```{r extract}
+ck_path <- tempfile(fileext = ".checkpoint.jsonl")
+audit_path <- tempfile(fileext = ".audit.jsonl")
+
+rt <- runtime_mock(
+  model = "llama-3.1-8b-instruct-q4_K_M",
+  seed = 2026L,
+  malform_schedule = list(
+    NOTE_02 = c(
+      "{truncated_json",
+      '{"sentiment":"very_bad","severity":99,"confidence":0.8,"crisis_flag":false}'
+    )
+  )
+)
+
+extracted <- airgap_extract(
+  data = notes,
+  text_col = "note_text",
+  schema = clinical_schema,
+  runtime = rt,
+  id_col = "note_id",
+  pii_policy = "redact",
+  checkpoint_path = ck_path,
+  audit_log_path = audit_path,
+  container_spec = spec,
+  model_path = model_file,
+  max_retries = 2L
+)
+
+extracted
+```
+
+Notice that `NOTE_02` succeeded on attempt 3 after two automatic structured
+repair retries, and every column has strict R types (`character`, `integer`,
+`numeric`, `logical`).
+
+```{r throughput}
+extraction_throughput(extracted)
+```
+
+## Step 5: Verify the Immutable Audit Log & Generate IRB Boilerplate
+
+Verify cryptographic chain integrity from `GENESIS` to the latest entry, then
+render a ready-to-paste Methods / IRB Data-Security protocol section directly
+from the verified ledger:
+
+```{r audit-and-irb}
+audit_log_verify(audit_path)
+
+irb_text <- generate_irb_narrative(
+  source = audit_path,
+  study_title = "Offline Clinical Progress Note Phenotyping",
+  protocol_id = "IRB-2026-0412",
+  institution = "University Research Medical Center",
+  regulatory_framework = c("HIPAA", "IRB"),
+  format = "markdown"
+)
+
+cat(irb_text)
+```
+
+```{r cleanup, include = FALSE}
+unlink(c(ck_path, audit_path))
+unlink(tmp_dir, recursive = TRUE)
+```

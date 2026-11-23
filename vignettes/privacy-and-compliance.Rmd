@@ -1,0 +1,197 @@
+---
+title: "Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+This vignette dives deeper into four operational safeguards required for
+large-scale sensitive research deployments (10,000–100,000+ text records on lab
+workstations or university HPC clusters):
+
+1. **Custom Domain Dictionaries & Allowlists** for high-precision PII
+   de-identification.
+2. **Keyed Reversible Pseudonymization (HMAC-SHA256)** with encrypted local
+   vaults (`AES-256-CBC` + `HMAC-SHA256` Encrypt-then-MAC).
+3. **Mid-Batch Crash Recovery** using atomic per-row JSONL checkpointing.
+4. **Tamper-Evident Audit Chain Verification** and zero-PII enforcement.
+
+```{r load}
+library(airgapllm)
+library(tibble)
+```
+
+## 1. Custom Lab Dictionaries, Regexes, and Clinical Allowlists
+
+Research corpora often include study-specific codes (e.g., `COHORT-2026-041`),
+local clinic names that function as indirect identifiers, and standardized
+clinical instruments (e.g., `Beck Depression Inventory`) that must *not* be
+mistaken for person names. Configure these once via `pii_config()`:
+
+```{r pii-config}
+cfg <- pii_config(
+  custom_patterns = c(cohort_id = "COHORT-[0-9]{4}-[0-9]{3}"),
+  custom_dictionary = list(
+    clinic = c("Valley Behavioral Health", "Oakridge Counseling")
+  ),
+  allowlist = c("Beck Depression Inventory", "Dr. Pepper")
+)
+cfg
+
+notes <- c(
+  "At Valley Behavioral Health (COHORT-2026-041), Dr. Elena Vance administered the Beck Depression Inventory.",
+  "Follow-up with Dr. Elena Vance at elena.vance@vbh.org; SSN 123-45-6789 confirmed.",
+  "Participant drank Dr. Pepper before session; Major Depressive Disorder symptoms stable."
+)
+
+pii_redact(notes, config = cfg)
+```
+
+## 2. Keyed Reversible Pseudonymization & Encrypted Local Vaults
+
+When longitudinal coreference matters (for example, tracking whether the same
+clinician or family member appears across multiple sessions), use
+`pii_pseudonymize()` with a 256-bit secret key from `pii_vault_key()`. Identical
+identifiers map deterministically to identical `<<TYPE_HASH>>` tokens while raw
+values remain isolated inside an encrypted local vault file:
+
+```{r pseudonymize}
+secret_key <- pii_vault_key()
+vault_file <- tempfile(fileext = ".vault.json")
+
+pse <- pii_pseudonymize(
+  notes,
+  key = secret_key,
+  config = cfg,
+  vault_path = vault_file,
+  encrypt_vault = TRUE
+)
+
+# Pseudonymized text preserves coreference for Dr. Elena Vance across rows 1 & 2
+pse$text
+
+# Printing the vault NEVER exposes raw sensitive mappings
+pse$vault
+```
+
+When authorized analysts need to restore original labels locally after
+inference, `pii_reidentify()` authenticates the vault MAC, decrypts in memory,
+and reverses every token losslessly:
+
+```{r reidentify}
+restored <- pii_reidentify(pse$text, vault = vault_file, key = secret_key)
+identical(restored, notes)
+```
+
+## 3. Crash-Resumable Checkpointing for Long HPC / GPU Batches
+
+HPC Slurm jobs hit walltime limits and workstations occasionally restart
+mid-run. `airgap_extract()` writes each completed row atomically to a JSONL
+checkpoint ledger (storing only `row_id`, validated schema fields, status, and
+`input_sha256`—never raw input text).
+
+Here we simulate a hard crash after processing 3 of 8 rows, and then resume
+seamlessly:
+
+```{r crash-resume}
+batch <- tibble(
+  doc_id = sprintf("EMA_%03d", 1:8),
+  journal = paste(
+    "Participant Dr. Hannah Abbott (hannah@study.edu) daily EMA reflection",
+    1:8
+  )
+)
+
+ema_schema <- extraction_schema(
+  affect = schema_field("enum", values = c("positive", "neutral", "negative")),
+  stress = schema_field("integer", min = 1L, max = 5L),
+  social_support = schema_field("logical")
+)
+
+ck_file <- tempfile(fileext = ".checkpoint.jsonl")
+
+# Run 1: crashes after 3 rows
+tryCatch(
+  airgap_extract(
+    batch, "journal", ema_schema,
+    runtime = runtime_mock(seed = 99L, crash_after = 3L),
+    id_col = "doc_id",
+    checkpoint_path = ck_file
+  ),
+  airgap_simulated_crash = function(e) {
+    message("Caught simulated interruption: ", conditionMessage(e))
+  }
+)
+
+# Run 2: resume = TRUE skips the 3 committed rows and processes only EMA_004..EMA_008
+rt_resume <- runtime_mock(seed = 99L)
+resumed <- airgap_extract(
+  batch, "journal", ema_schema,
+  runtime = rt_resume,
+  id_col = "doc_id",
+  checkpoint_path = ck_file,
+  resume = TRUE
+)
+
+extraction_throughput(resumed)
+resumed
+```
+
+## 4. Audit Chain Tamper Detection & Zero-PII Guarantees
+
+Every entry appended via `audit_log_append()` chains `prev_hash -> entry_hash`
+using canonical SHA-256 JSON hashing. Modifying even a single character in an
+earlier entry invalidates the cryptographic chain and is caught immediately by
+`audit_log_verify()`:
+
+```{r audit-tamper}
+audit_file <- tempfile(fileext = ".audit.jsonl")
+
+audit_log_append(audit_file, resumed, metadata = list(site = "Site-A", wave = "Wave-1"))
+audit_log_append(
+  audit_file,
+  preflight_isolation_check(endpoint = "http://127.0.0.1:11434"),
+  metadata = list(site = "Site-A")
+)
+
+# Clean ledger verifies as VALID
+audit_log_verify(audit_file)
+
+# Simulate post-hoc tampering on line 1
+tampered_file <- tempfile(fileext = ".tampered.jsonl")
+lines <- readLines(audit_file)
+lines[1L] <- sub("Wave-1", "Wave-9", lines[1L], fixed = TRUE)
+writeLines(lines, tampered_file)
+
+audit_log_verify(tampered_file)
+```
+
+Attempting to write raw text keys or PII into an audit log is rejected before
+touching disk:
+
+```{r audit-zero-pii}
+tryCatch(
+  audit_log_append(
+    audit_file,
+    list(run_id = "demo", raw_text = "Patient John Doe reported insomnia.")
+  ),
+  airgap_audit_privacy_error = function(e) {
+    message("Blocked privacy violation: ", conditionMessage(e))
+  }
+)
+```
+
+```{r cleanup, include = FALSE}
+unlink(c(vault_file, ck_file, audit_file, tampered_file))
+```

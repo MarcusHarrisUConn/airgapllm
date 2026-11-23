@@ -1,0 +1,196 @@
+---
+title: "IRB & HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{IRB & HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+Institutional Review Boards (IRBs) and HIPAA Security Officers typically ask
+four concrete questions before approving a local large language model (LLM)
+protocol on clinical, behavioral, or educational text:
+
+1. **What direct identifiers exist in the corpus before inference, and how are
+   HIPAA Safe Harbor rules enforced?**
+2. **How are re-identification mapping tables protected at rest and rotated
+   over multi-wave longitudinal studies?**
+3. **What guarantees prevent prompt-injected or memorized PII from leaking into
+   model outputs, checkpoints, or compliance logs?**
+4. **What verifiable, PII-free documentation can be attached to the IRB
+   submission and archived for institutional audit?**
+
+This vignette walks step-by-step through the complete compliance workflow using
+the bundled 100% fictional `synthetic_notes` dataset.
+
+```{r load}
+library(airgapllm)
+data("synthetic_notes", package = "airgapllm")
+synthetic_notes[, c("note_id", "domain", "site", "wave", "contains_synthetic_phi")]
+```
+
+## Step 1: Pre-Inference Privacy Dry-Run (`pii_audit_dataframe()`)
+
+Before starting any extraction job, run `pii_audit_dataframe()` to inspect
+entity density, trigger HIPAA Safe Harbor alerts, detect Unicode obfuscators,
+and inspect strictly redacted preview snippets—with **zero raw PII** printed
+or stored in the audit object:
+
+```{r dry-run}
+dry_run <- pii_audit_dataframe(
+  data = synthetic_notes,
+  text_col = "note_text",
+  id_col = "note_id",
+  high_density_threshold = 3L,
+  preview_n = 4L
+)
+dry_run
+```
+
+Inspect the strictly redacted previews to verify that domain-specific terms
+(such as local clinic names or study codes) are not slipping through:
+
+```{r previews}
+dry_run$masked_previews
+```
+
+## Step 2: HIPAA Safe Harbor Rules (Ages > 89 & Restricted 3-Digit ZIPs)
+
+Under **45 CFR 164.514(b)(2)** (HIPAA Safe Harbor), ages over 89 must be
+redacted/aggregated, full 5-digit US ZIP codes must be scrubbed, and the 17
+three-digit ZIP prefixes with population 20,000 or fewer cannot be retained.
+`airgapllm` enforces these rules automatically in `pii_default_entities()`:
+
+```{r hipaa-safe-harbor}
+# Inspect the 17 HHS restricted 3-digit ZIP prefixes
+hipaa_restricted_zip3()
+
+hipaa_examples <- c(
+  "92-year-old participant (age: 92) residing in Hartford, CT 06103.",
+  "89-year-old participant with SpO2 98% and dose 95 mg (non-age units preserved).",
+  "Rural intake from ZIP prefix 036xx and ZIP 82101; non-restricted ZIP prefix 061."
+)
+pii_redact(hipaa_examples)
+```
+
+## Step 3: Keyed Pseudonymization & Vault Master Key Rotation
+
+For multi-wave longitudinal research where tracking entity coreference across
+waves is valuable, `pii_pseudonymize()` maps identifiers deterministically via
+**RFC 5869 HKDF-SHA256 + HMAC-SHA256** and isolates mappings in a separate
+`airgapllm_vault_v2` file (`AES-256-CBC` + constant-time Encrypt-then-MAC
+`HMAC-SHA256`, `0600` owner-only permissions).
+
+Periodically—or when lab personnel rotate off a protocol—rotate the vault's
+at-rest encryption key atomically with `pii_vault_rotate_key()` while keeping
+historical pseudonym tokens seamlessly re-identifiable:
+
+```{r vault-rotation}
+work_dir <- tempfile("airgap_irb_walkthrough_")
+dir.create(work_dir)
+vault_path <- file.path(work_dir, "study_vault.json")
+
+key_wave1 <- pii_vault_key()
+pse <- pii_pseudonymize(
+  synthetic_notes$note_text[1:4],
+  key = key_wave1,
+  vault_path = vault_path,
+  encrypt_vault = TRUE
+)
+pse$vault
+
+# Rotate the vault master key atomically to a fresh 256-bit key
+key_wave2 <- pii_vault_key()
+rot <- pii_vault_rotate_key(vault_path, old_key = key_wave1, new_key = key_wave2)
+rot[c("vault_id", "old_key_fingerprint", "new_key_fingerprint", "n_tokens")]
+
+# The old key is immediately rejected; the new key restores text losslessly
+identical(
+  pii_reidentify(pse$text, vault = vault_path, key = key_wave2),
+  synthetic_notes$note_text[1:4]
+)
+```
+
+## Step 4: Schema-Enforced Extraction with Output PII Leakage Scanning
+
+During `airgap_extract()`, untrusted records are framed inside explicit
+`<UNTRUSTED_RESEARCH_RECORD>` boundaries to resist embedded prompt-injection
+attacks, and generated character outputs are scanned post-inference
+(`output_pii_action = "redact"` by default) so any echoed or memorized PII is
+scrubbed before hitting disk or returning to R:
+
+```{r extract-audit}
+audit_path <- file.path(work_dir, "study_audit.jsonl")
+ck_path <- file.path(work_dir, "study_checkpoint.jsonl")
+
+spec <- airgap_container_spec(
+  backend = "ollama",
+  image = "ollama/ollama",
+  image_digest = paste0("sha256:", strrep("a", 64)),
+  model_dir = "/srv/airgapllm/models",
+  model_digest = paste0("sha256:", strrep("b", 64)),
+  gpu = "nvidia"
+)
+
+coding_schema <- extraction_schema(
+  sentiment = schema_field("enum", values = c("positive", "neutral", "negative")),
+  severity = schema_field("integer", min = 0L, max = 10L),
+  crisis_flag = schema_field("logical"),
+  rationale = schema_field("character", max_length = 160L),
+  name = "irb_clinical_coding_v1"
+)
+
+extracted <- airgap_extract(
+  data = synthetic_notes[1:8, ],
+  text_col = "note_text",
+  schema = coding_schema,
+  runtime = runtime_mock(model = "llama3.1:8b-instruct-q4_K_M", seed = 2026L),
+  id_col = "note_id",
+  pii_policy = "redact",
+  output_pii_action = "redact",
+  checkpoint_path = ck_path,
+  audit_log_path = audit_path,
+  container_spec = spec
+)
+
+extracted[, c("note_id", "sentiment", "severity", "crisis_flag", ".status", ".attempts")]
+audit_log_verify(audit_path)
+```
+
+## Step 5: Export a Self-Contained, SHA-256-Sealed IRB Compliance Packet
+
+Finally, bundle every compliance artifact—the verified hash-chained audit log,
+pre-flight isolation attestation, hardened Docker/Compose/Apptainer container
+configs, Markdown and Quarto IRB narratives, and a SHA-256 `packet_manifest.json`
+—into one self-contained, zero-PII review directory via
+`export_irb_compliance_packet()`:
+
+```{r compliance-packet}
+pkt_dir <- file.path(work_dir, "irb_submission_packet")
+pkt <- export_irb_compliance_packet(
+  out_dir = pkt_dir,
+  extraction = extracted,
+  audit_log_path = audit_path,
+  container_spec = spec,
+  study_title = "Offline Phenotyping of Synthetic Clinical & EMA Records",
+  protocol_id = "IRB-2026-0412",
+  institution = "University Research Center",
+  regulatory_framework = c("HIPAA", "IRB")
+)
+
+pkt
+pkt$files
+```
+
+```{r cleanup, include = FALSE}
+unlink(work_dir, recursive = TRUE)
+```

@@ -690,6 +690,7 @@ pii_detect <- function(text, config = pii_config(), include_values = TRUE) {
   }
   assert_scalar_logical(include_values, "include_values")
 
+  text <- normalize_text_utf8(text)
   stopwords <- pii_name_stopwords()
   rows <- list()
 
@@ -856,6 +857,7 @@ pii_privacy_report <- function(x, config = pii_config(), text_col = NULL) {
     cli::cli_abort("{.arg config} must be an `airgap_pii_config` object.", class = "airgap_validation_error")
   }
 
+  x <- normalize_text_utf8(x)
   stopwords <- pii_name_stopwords()
   doc_spans <- lapply(x, detect_pii_single, config = config, stopwords = stopwords)
   build_privacy_report_from_spans(length(x), doc_spans, config)
@@ -896,6 +898,7 @@ pii_redact <- function(
   assert_scalar_string(replacement, "replacement", allow_empty = TRUE)
   assert_scalar_logical(return_details, "return_details")
 
+  text <- normalize_text_utf8(text)
   stopwords <- pii_name_stopwords()
   doc_spans <- vector("list", length(text))
   redacted <- text
@@ -1062,6 +1065,7 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
     vault_id = vault$vault_id,
     key_fingerprint = vault$key_fingerprint,
     created_at = vault$created_at,
+    rotated_at = vault$rotated_at,
     mappings = vault$mappings
   ))
 
@@ -1130,6 +1134,14 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
 #' @return An `airgap_pii_vault` object.
 #'
 #' @export
+#' @examples
+#' key <- pii_vault_key()
+#' pse <- pii_pseudonymize("Contact jane@example.org", key = key)
+#' vf <- tempfile(fileext = ".vault.json")
+#' pii_vault_save(pse$vault, vf, key = key)
+#' loaded <- pii_vault_load(vf, key = key)
+#' loaded
+#' unlink(vf)
 pii_vault_load <- function(path, key = NULL) {
   assert_scalar_string(path, "path")
   assert_no_control_chars(path, "path")
@@ -1207,6 +1219,7 @@ pii_vault_load <- function(path, key = NULL) {
         vault_id = inner$vault_id,
         key_fingerprint = inner$key_fingerprint,
         created_at = inner$created_at,
+        rotated_at = inner$rotated_at,
         mappings = inner$mappings %||% list()
       ),
       class = "airgap_pii_vault"
@@ -1218,9 +1231,101 @@ pii_vault_load <- function(path, key = NULL) {
       vault_id = env$vault_id,
       key_fingerprint = env$key_fingerprint,
       created_at = env$created_at,
+      rotated_at = env$rotated_at,
       mappings = env$mappings %||% list()
     ),
     class = "airgap_pii_vault"
+  )
+}
+
+#' Atomically Rotate the Master Encryption Key of a PII Vault
+#'
+#' Authenticates and decrypts an existing `airgapllm_vault_v2` (or legacy v1)
+#' vault file using `old_key`, updates the vault key fingerprint under
+#' `new_key`, and atomically re-encrypts the vault at rest using fresh RFC 5869
+#' HKDF-SHA256 subkeys, a brand-new 128-bit random salt, a fresh 128-bit random
+#' IV, AAD-bound HMAC-SHA256 authentication, and owner-only (`0600`) file
+#' permissions. All existing token-to-value mappings are preserved so
+#' previously pseudonymized outputs remain re-identifiable with `new_key`.
+#'
+#' @param path Character scalar path to the existing encrypted vault file.
+#' @param old_key Current secret key used to authenticate and decrypt `path`.
+#' @param new_key New secret key (e.g., from [pii_vault_key()]) used to
+#'   re-encrypt the vault. Must differ from `old_key`.
+#' @param out_path Destination file path for the rotated vault. Defaults to
+#'   `path` (in-place atomic replacement via temporary file + rename).
+#' @param backup Logical scalar; if `TRUE` and `out_path == path`, preserves a
+#'   `0600` backup copy at `paste0(path, ".bak")` prior to replacement.
+#'   Defaults to `FALSE`.
+#'
+#' @return A list with `path`, `vault_id`, `old_key_fingerprint`,
+#'   `new_key_fingerprint`, `n_tokens`, and `rotated_at`.
+#'
+#' @export
+#' @examples
+#' k1 <- pii_vault_key()
+#' k2 <- pii_vault_key()
+#' vf <- tempfile(fileext = ".vault.json")
+#' pse <- pii_pseudonymize("Patient Jane Doe (jane@example.org)", key = k1, vault_path = vf)
+#' rot <- pii_vault_rotate_key(vf, old_key = k1, new_key = k2)
+#' rot$new_key_fingerprint
+#' pii_reidentify(pse$text, vault = vf, key = k2)
+#' unlink(vf)
+pii_vault_rotate_key <- function(
+  path,
+  old_key,
+  new_key,
+  out_path = path,
+  backup = FALSE
+) {
+  assert_scalar_string(path, "path")
+  assert_scalar_string(out_path, "out_path")
+  assert_no_control_chars(path, "path")
+  assert_no_control_chars(out_path, "out_path")
+  assert_scalar_logical(backup, "backup")
+
+  old_sub <- derive_vault_subkeys(old_key)
+  new_sub <- derive_vault_subkeys(new_key)
+  if (constant_time_equal(old_sub$master, new_sub$master)) {
+    cli::cli_abort(
+      "{.arg new_key} must be distinct from {.arg old_key} during key rotation.",
+      class = "airgap_key_error"
+    )
+  }
+
+  # Authenticate and decrypt existing vault under old_key
+  vault <- pii_vault_load(path, key = old_key)
+  old_fp <- vault$key_fingerprint
+  rotated_at <- utc_timestamp()
+
+  if (isTRUE(backup) && identical(normalizePath(path, winslash = "/", mustWork = FALSE),
+                                  normalizePath(out_path, winslash = "/", mustWork = FALSE))) {
+    bak_path <- paste0(path, ".bak")
+    file.copy(path, bak_path, overwrite = TRUE)
+    suppressWarnings(Sys.chmod(bak_path, mode = "0600"))
+  }
+
+  rotated_vault <- structure(
+    list(
+      vault_id = vault$vault_id,
+      key_fingerprint = new_sub$fingerprint,
+      created_at = vault$created_at,
+      rotated_at = rotated_at,
+      mappings = vault$mappings
+    ),
+    class = "airgap_pii_vault"
+  )
+
+  # Atomically write fresh HKDF-SHA256 v2 vault under new_key
+  pii_vault_save(rotated_vault, path = out_path, key = new_key, encrypt = TRUE)
+
+  list(
+    path = normalizePath(out_path, winslash = "/", mustWork = TRUE),
+    vault_id = rotated_vault$vault_id,
+    old_key_fingerprint = old_fp,
+    new_key_fingerprint = new_sub$fingerprint,
+    n_tokens = length(rotated_vault$mappings),
+    rotated_at = rotated_at
   )
 }
 
@@ -1295,6 +1400,7 @@ pii_pseudonymize <- function(
     }
   }
 
+  text <- normalize_text_utf8(text)
   stopwords <- pii_name_stopwords()
   doc_spans <- vector("list", length(text))
   pseudo_text <- text

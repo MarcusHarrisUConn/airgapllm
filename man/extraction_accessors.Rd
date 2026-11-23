@@ -31,3 +31,12 @@ Convenience accessors for the cryptographic run manifest, aggregate privacy
 report, pre-flight isolation attestation, separate pseudonymization vault,
 and throughput metrics attached to an \code{\link[=airgap_extract]{airgap_extract()}} result.
 }
+\examples{
+df <- tibble::tibble(id = "R1", txt = "Dr. Jane Doe visited; mood calm.")
+sc <- extraction_schema(mood = schema_field("enum", values = c("calm", "tense")))
+res <- airgap_extract(df, "txt", sc, runtime_mock(), id_col = "id")
+extraction_throughput(res)
+extraction_privacy_report(res)
+extraction_preflight(res)
+extraction_manifest(res)$schema_digest
+}

@@ -22,3 +22,9 @@ Character scalar repair prompt string.
 Constructs a deterministic follow-up prompt instructing the local model to
 repair schema or JSON syntax errors reported by \code{\link[=validate_extraction]{validate_extraction()}}.
 }
+\examples{
+sc <- extraction_schema(score = schema_field("integer", min = 0L, max = 10L))
+bad <- '{"score": 99}'
+val <- validate_extraction(bad, sc)
+cat(build_repair_prompt("Extract score.", bad, val$errors, sc))
+}

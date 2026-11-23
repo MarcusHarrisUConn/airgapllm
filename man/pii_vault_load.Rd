@@ -20,3 +20,12 @@ file written by \code{\link[=pii_vault_save]{pii_vault_save()}}. Verifies the HM
 tag in constant time BEFORE decryption to defeat padding-oracle and timing
 attacks while never exposing plaintext or key material in error messages.
 }
+\examples{
+key <- pii_vault_key()
+pse <- pii_pseudonymize("Contact jane@example.org", key = key)
+vf <- tempfile(fileext = ".vault.json")
+pii_vault_save(pse$vault, vf, key = key)
+loaded <- pii_vault_load(vf, key = key)
+loaded
+unlink(vf)
+}

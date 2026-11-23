@@ -377,6 +377,12 @@ print.airgap_audit_entry <- function(x, ...) {
 #'   `entries` (list of parsed records), and `summary` (tibble).
 #'
 #' @export
+#' @examples
+#' tmp_log <- tempfile(fileext = ".jsonl")
+#' pf <- preflight_isolation_check(endpoint = "http://127.0.0.1:11434")
+#' audit_log_append(tmp_log, pf)
+#' audit_log_read(tmp_log)
+#' unlink(tmp_log)
 audit_log_read <- function(path) {
   assert_scalar_string(path, "path")
   if (!file.exists(path)) {
@@ -449,6 +455,12 @@ print.airgap_audit_log <- function(x, ...) {
 #'   and `verified_at`.
 #'
 #' @export
+#' @examples
+#' tmp_log <- tempfile(fileext = ".jsonl")
+#' pf <- preflight_isolation_check(endpoint = "http://127.0.0.1:11434")
+#' audit_log_append(tmp_log, pf)
+#' audit_log_verify(tmp_log)
+#' unlink(tmp_log)
 audit_log_verify <- function(path, strict = TRUE) {
   assert_scalar_string(path, "path")
   assert_scalar_logical(strict, "strict")

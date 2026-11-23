@@ -1,6 +1,6 @@
 Package: airgapllm
 Title: Verifiably Offline Containerized Local LLM Workflows
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: 
     person("Marcus", "Harris", , "marcus.harris.uconn@gmail.com", role = c("aut", "cre", "cph"))
 Description: Provides a privacy-first workbench for running verifiably offline,
@@ -8,13 +8,14 @@ Description: Provides a privacy-first workbench for running verifiably offline,
     'vLLM') on sensitive research data under 'IRB', 'HIPAA', and 'FERPA'
     protocols. Generates hardened 'Docker' and 'Apptainer' container
     configurations with network isolation and pinned 'SHA-256' image and
-    model-weight digests, executes deterministic pure-R pre-inference PII
-    detection, redaction, and keyed 'HMAC-SHA256' reversible pseudonymization,
-    performs crash-resumable schema-enforced batch extraction into typed
-    tibbles with structured repair retries, and maintains tamper-evident
-    hash-chained 'JSONL' audit trails alongside 'IRB' protocol documentation.
+    model-weight digests, executes deterministic pre-inference personally
+    identifiable information (PII) detection, redaction, and keyed
+    'HMAC-SHA256' reversible pseudonymization, performs crash-resumable
+    schema-enforced batch extraction into typed tibbles with structured repair
+    retries, and maintains tamper-evident hash-chained 'JSONL' audit trails
+    alongside 'IRB' protocol documentation.
 License: MIT + file LICENSE
-URL: https://github.com/MarcusHarrisUConn/airgapllm
+URL: https://marcusharrisphd.com/airgapllm/, https://github.com/MarcusHarrisUConn/airgapllm
 BugReports: https://github.com/MarcusHarrisUConn/airgapllm/issues
 Depends: 
     R (>= 4.1.0)
@@ -36,5 +37,7 @@ Suggests:
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Encoding: UTF-8
+LazyData: true
+Language: en-US
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.1.0

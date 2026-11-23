@@ -23,3 +23,10 @@ a JSONL audit log, verifying sequence continuity (\verb{1..n}), \code{prev_hash}
 exact \code{entry_hash} digests, and absence of forbidden raw-text keys. Detects
 field edits, deletions, insertions, line reordering, and truncation.
 }
+\examples{
+tmp_log <- tempfile(fileext = ".jsonl")
+pf <- preflight_isolation_check(endpoint = "http://127.0.0.1:11434")
+audit_log_append(tmp_log, pf)
+audit_log_verify(tmp_log)
+unlink(tmp_log)
+}

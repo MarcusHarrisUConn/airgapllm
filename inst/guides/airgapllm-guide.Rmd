@@ -1,0 +1,199 @@
+---
+title: "airgapllm: IRB / HIPAA Offline Local AI Security & Protocol Field Guide"
+author: "Marcus Harris"
+date: "2026"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    highlight: tango
+    latex_engine: pdflatex
+geometry: margin=1in
+fontsize: 11pt
+colorlinks: true
+linkcolor: NavyBlue
+urlcolor: NavyBlue
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  echo = TRUE
+)
+```
+
+\newpage
+
+# Executive Summary
+
+Behavioral, clinical, educational, and medical researchers frequently hold rich
+unstructured text corpora---therapy progress notes, ecological momentary
+assessment (EMA) journals, patient narratives, and student essays---governed by
+Institutional Review Board (IRB), HIPAA, or FERPA protocols that strictly
+prohibit transmitting participant text to external cloud LLM APIs.
+
+**`airgapllm`** (v0.3.0) provides an auditable, privacy-first R workbench for
+**verifiably offline local LLM inference** across `Ollama`, `llama.cpp`, and
+`vLLM`. Every stage enforces defense-in-depth:
+
+1. **Fail-Closed Network Isolation**: Canonical loopback / Unix-socket URL
+   validation (blocking SSRF, IPv6-mapped IPv4, octal/hex/decimal IPs, CRLF,
+   and proxy exfiltration), digest-pinned `--network none` Docker and HPC
+   Apptainer configurations, read-only root filesystems, and symlink-confined
+   SHA-256 model weight verification.
+2. **Pre-Inference De-Identification & HIPAA Safe Harbor**: Deterministic
+   pure-R PII detection and redaction (including Unicode homoglyph / zero-width
+   canonicalization, ReDoS-safe regexes, HIPAA Safe Harbor ages > 89, and
+   5-digit / restricted 3-digit US ZIP prefixes) plus keyed reversible
+   pseudonymization stored in an encrypted RFC 5869 HKDF-SHA256 + AES-256-CBC +
+   constant-time Encrypt-then-MAC (`0600`) local vault with atomic key rotation.
+3. **Resumable Schema-Enforced Batch Extraction**: Strictly typed output
+   tibbles, delimited `<UNTRUSTED_RESEARCH_RECORD>` prompt-injection framing,
+   post-inference output PII leakage scanning, bounded structured repair
+   retries, long-transcript overlapping chunking, and UTF-8-resilient atomic
+   per-row JSONL checkpointing.
+4. **Immutable Audit Trail & IRB Protocol Generation**: Tamper-evident
+   SHA-256 hash-chained JSONL compliance logs (strictly barring raw text and
+   PII), automated Markdown/Quarto IRB Methods boilerplate, and SHA-256-sealed
+   compliance packets.
+
+# Architecture & Threat Mitigations
+
+| Threat Class | Primary Failure Mode | `airgapllm` Mitigation |
+| :--- | :--- | :--- |
+| Network Exfiltration / SSRF | Cloud API URLs, IPv6-mapped IPv4, octal IPs, outbound proxies | `is_loopback_endpoint()`, `preflight_isolation_check(strict_proxy = TRUE)`, `noproxy = "*"`, `--network none` |
+| Supply-Chain & Weight Tampering | Mutable `:latest` tags, tampered GGUF shards, symlink escapes | Pinned `sha256:` image digests, `verify_model_digest(allow_symlinks = FALSE)` |
+| Container Escape / Persistence | Writable rootfs, root capabilities, `:rw` bind injection | `--read-only`, `--cap-drop ALL`, `no-new-privileges`, strict path/env/arg validators |
+| Pre-Inference PII Exposure | Direct PHI/PII or Unicode homoglyphs entering LLM context | Mandatory `pii_policy`, Unicode canonicalizer, HIPAA Safe Harbor age > 89 & ZIP3 |
+| Vault Compromise / Padding Oracle | Plaintext mapping CSVs, unsalted keys, timing side channels | Vault v2: HKDF-SHA256 key separation, fresh salt/IV, AAD, constant-time MAC before decrypt, `0600` |
+| Prompt Injection & Output Echo | Embedded instructions echoing PII into generated text | `<UNTRUSTED_RESEARCH_RECORD>` framing + `output_pii_action` post-inference scan |
+| Mid-Batch Crash / Schema Drift | Walltime preemption, truncated UTF-8 writes, mixed schemas | Atomic JSONL checkpointing, trailing-crash recovery, schema + prompt hash guards |
+| Post-Hoc Audit Tampering | Altered compliance logs or raw text leaking into logs | SHA-256 chain from `GENESIS`, constant-time verification, strict zero-PII schema allowlist |
+
+# Practical End-to-End Compliance Workflow
+
+All examples below execute 100% offline using the bundled `synthetic_notes`
+dataset and deterministic `runtime_mock()`.
+
+```{r end-to-end}
+library(airgapllm)
+data("synthetic_notes", package = "airgapllm")
+
+# 1. Pre-inference privacy dry-run (strictly zero raw PII emitted)
+dry_run <- pii_audit_dataframe(
+  synthetic_notes,
+  text_col = "note_text",
+  id_col = "note_id"
+)
+dry_run
+```
+
+## GPU Sizing & Air-Gapped Container Generation
+
+Before provisioning a lab GPU workstation or Slurm GPU node, estimate VRAM
+requirements across quantization levels and generate pinned air-gapped
+container specifications:
+
+```{r gpu-and-container}
+estimate_vram_requirements(
+  params_b = 8,
+  quantization = "Q4_K_M",
+  context_length = 8192L,
+  batch_size = 2L
+)
+
+spec <- airgap_container_spec(
+  backend = "ollama",
+  image = "ollama/ollama",
+  image_digest = paste0("sha256:", strrep("a", 64)),
+  model_dir = "/srv/airgapllm/models",
+  model_digest = paste0("sha256:", strrep("b", 64)),
+  gpu = "nvidia",
+  memory_limit = "24g",
+  user = "1000:1000"
+)
+spec
+```
+
+## Schema-Enforced Extraction, Audit Verification & Compliance Packet
+
+```{r extract-packet}
+work_dir <- tempfile("airgap_guide_")
+dir.create(work_dir)
+
+schema <- extraction_schema(
+  sentiment = schema_field("enum", values = c("positive", "neutral", "negative")),
+  severity = schema_field("integer", min = 0L, max = 10L),
+  crisis_flag = schema_field("logical"),
+  name = "clinical_coding_v1"
+)
+
+audit_file <- file.path(work_dir, "audit_log.jsonl")
+ck_file <- file.path(work_dir, "checkpoint.jsonl")
+
+results <- airgap_extract(
+  data = synthetic_notes[1:6, ],
+  text_col = "note_text",
+  schema = schema,
+  runtime = runtime_mock(model = "llama3.1:8b-instruct-q4_K_M", seed = 2026L),
+  id_col = "note_id",
+  pii_policy = "redact",
+  checkpoint_path = ck_file,
+  audit_log_path = audit_file,
+  container_spec = spec
+)
+
+results[, c("note_id", "sentiment", "severity", "crisis_flag", ".status")]
+audit_log_verify(audit_file)
+
+pkt_dir <- file.path(work_dir, "irb_packet")
+pkt <- export_irb_compliance_packet(
+  out_dir = pkt_dir,
+  extraction = results,
+  audit_log_path = audit_file,
+  container_spec = spec,
+  study_title = "Offline Clinical Narrative Extraction Study",
+  protocol_id = "IRB-2026-0412",
+  regulatory_framework = c("HIPAA", "IRB")
+)
+pkt
+```
+
+# Cryptographic Vault Lifecycle & Key Rotation
+
+For longitudinal studies requiring deterministic cross-wave coreference, use
+`pii_pseudonymize()` paired with periodic `pii_vault_rotate_key()` rotation:
+
+```{r vault-lifecycle}
+k1 <- pii_vault_key()
+k2 <- pii_vault_key()
+vf <- file.path(work_dir, "study.vault.json")
+
+pse <- pii_pseudonymize(synthetic_notes$note_text[1:3], key = k1, vault_path = vf)
+rot <- pii_vault_rotate_key(vf, old_key = k1, new_key = k2)
+rot[c("old_key_fingerprint", "new_key_fingerprint", "n_tokens")]
+
+# Verify lossless local re-identification under the rotated master key
+identical(pii_reidentify(pse$text, vault = vf, key = k2), synthetic_notes$note_text[1:3])
+```
+
+# Pre-Submission IRB Operational Checklist
+
+1. **Pin Exact Digests**: Record SHA-256 digests for both container image and
+   local GGUF/safetensors weights via `verify_model_digest()`.
+2. **Verify Isolation**: Run `preflight_isolation_check(strict_proxy = TRUE)`
+   and archive `preflight_attestation.json`.
+3. **Run Privacy Dry-Run**: Review `pii_audit_dataframe()` advisories and add
+   study-specific clinic/program names to `pii_config(custom_dictionary = ...)`.
+4. **Separate Vault Storage**: Keep encrypted `airgapllm_vault_v2` files and
+   master keys on institutional encrypted storage separate from extracted
+   datasets and audit logs; rotate keys via `pii_vault_rotate_key()`.
+5. **Seal & Archive Packet**: Generate a verified compliance directory with
+   `export_irb_compliance_packet()` and attach `irb_protocol_narrative.md` (or
+   `.qmd`) to the IRB protocol submission.
+
+```{r cleanup, include = FALSE}
+unlink(work_dir, recursive = TRUE)
+```

@@ -177,20 +177,27 @@ checkpoint_load <- function(path, schema_digest, prompt_template_hash, pii_polic
       c(
         "Checkpoint schema mismatch: cannot resume into a different extraction schema.",
         "x" = "Checkpoint schema digest: {header$schema_digest}",
-        "x" = "Current schema digest:    {schema_digest}"
+        "x" = "Current schema digest:    {schema_digest}",
+        "i" = "Start a new `checkpoint_path` or pass `resume = FALSE` to overwrite."
       ),
       class = "airgap_checkpoint_error"
     )
   }
   if (!constant_time_equal(as.character(header$prompt_template_hash %||% ""), prompt_template_hash)) {
     cli::cli_abort(
-      "Checkpoint prompt template hash mismatch: start a new checkpoint file for a modified prompt.",
+      c(
+        "Checkpoint prompt template hash mismatch: cannot resume with a modified prompt.",
+        "i" = "Start a new `checkpoint_path` or pass `resume = FALSE` to overwrite."
+      ),
       class = "airgap_checkpoint_error"
     )
   }
   if (!identical(header$pii_policy, pii_policy)) {
     cli::cli_abort(
-      "Checkpoint PII policy mismatch (checkpoint: '{header$pii_policy}', current: '{pii_policy}').",
+      c(
+        "Checkpoint PII policy mismatch (checkpoint: '{header$pii_policy}', current: '{pii_policy}').",
+        "i" = "Start a new `checkpoint_path` or pass `resume = FALSE` to overwrite."
+      ),
       class = "airgap_checkpoint_error"
     )
   }
@@ -495,8 +502,8 @@ airgap_extract <- function(
   prompt_template_hash <- sha256_string(template)
   run_id <- run_id %||% generate_run_id("run")
 
-  # 3. Mandatory Pre-Inference Privacy & PII Gate
-  raw_texts <- as.character(data[[text_col]])
+  # 3. Mandatory Pre-Inference Privacy & PII Gate (normalize Latin-1 / Windows-1252 to UTF-8 safely)
+  raw_texts <- normalize_text_utf8(as.character(data[[text_col]]))
   active_vault <- NULL
 
   if (identical(pii_policy, "redact")) {
@@ -795,6 +802,14 @@ airgap_extract <- function(
 #'
 #' @name extraction_accessors
 #' @export
+#' @examples
+#' df <- tibble::tibble(id = "R1", txt = "Dr. Jane Doe visited; mood calm.")
+#' sc <- extraction_schema(mood = schema_field("enum", values = c("calm", "tense")))
+#' res <- airgap_extract(df, "txt", sc, runtime_mock(), id_col = "id")
+#' extraction_throughput(res)
+#' extraction_privacy_report(res)
+#' extraction_preflight(res)
+#' extraction_manifest(res)$schema_digest
 extraction_manifest <- function(x) {
   if (!inherits(x, "airgap_extraction")) {
     cli::cli_abort("{.arg x} must be an `airgap_extraction` object.", class = "airgap_validation_error")

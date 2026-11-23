@@ -483,6 +483,11 @@ validate_extraction <- function(raw_output, schema) {
 #' @return Character scalar repair prompt string.
 #'
 #' @export
+#' @examples
+#' sc <- extraction_schema(score = schema_field("integer", min = 0L, max = 10L))
+#' bad <- '{"score": 99}'
+#' val <- validate_extraction(bad, sc)
+#' cat(build_repair_prompt("Extract score.", bad, val$errors, sc))
 build_repair_prompt <- function(original_prompt, invalid_output, errors, schema) {
   assert_scalar_string(original_prompt, "original_prompt")
   if (!inherits(schema, "airgap_schema")) {

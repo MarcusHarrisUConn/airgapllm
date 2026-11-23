@@ -1,3 +1,20 @@
+# airgapllm 0.3.0
+
+## Production Clinical & HPC Workflow Capabilities
+
+* Added `chunk_clinical_texts()` for deterministic paragraph-, sentence-, or character-aligned overlapping chunking of long therapy transcripts and interviews with preserved `doc_id`, `chunk_id`, `chunk_index`, and character offset provenance.
+* Added `pii_audit_dataframe()` for non-destructive pre-inference privacy dry-runs producing aggregate entity coverage, high-PII-density row flags, HIPAA Safe Harbor and Unicode advisories, and strictly redacted preview snippets containing zero raw PII.
+* Added `estimate_vram_requirements()` to estimate total GPU VRAM (model weights + GQA KV-cache + runtime overhead) across parameter counts, quantizations (`Q4_K_M`, `Q6_K`, `Q8_0`, `FP16`), context windows, batch sizes, and GPU hardware tiers.
+* Added `pii_vault_rotate_key()` for atomic in-place or target-path master key rotation of encrypted `airgapllm_vault_v2` vaults with fresh HKDF-SHA256 salts, fresh IVs, and preserved historical token mappings.
+* Added `export_irb_compliance_packet()` to assemble a self-contained, strictly PII-free, SHA-256-sealed IRB/HIPAA review directory containing the verified audit log, pre-flight attestation, hardened container definitions, Markdown/Quarto IRB narratives, and `packet_manifest.json`.
+* Added bundled 100% fictional teaching dataset `synthetic_notes` (`data/synthetic_notes.rda`) spanning synthetic clinical therapy notes, EMA journals, student writing, HIPAA Safe Harbor cases, and a multi-paragraph transcript.
+* Hardened `airgap_extract()` and PII helpers with safe Latin-1 / Windows-1252 to UTF-8 normalization (`normalize_text_utf8()`), graceful 0-row data frame handling, and actionable checkpoint schema/prompt/policy mismatch diagnostics.
+
+## CRAN Readiness, Documentation & Website
+
+* Expanded to 4 executable offline vignettes: `getting-started`, `privacy-and-compliance`, `irb-hipaa-compliance-walkthrough`, and `hpc-gpu-deployment`.
+* Added package-level documentation (`?airgapllm`), `inst/CITATION`, runnable example scripts in `inst/examples/`, standalone PDF Field Guide (`inst/guides/airgapllm-guide.Rmd`), `inst/WORDLIST` for zero-misspelling checks, `cran-comments.md`, `_pkgdown.yml`, and GitHub Actions CI workflows (`R-CMD-check.yaml`, `pkgdown.yaml`).
+
 # airgapllm 0.2.0
 
 ## Security Hardening & Red-Team Upgrades
@@ -9,7 +26,7 @@
 * **HIPAA Safe Harbor, Unicode Defense & ReDoS Hardening**:
   - Added `hipaa_restricted_zip3()` and built-in `"age_over_89"` and `"zip_code"` HIPAA Safe Harbor entity detectors (covering ages > 89, 5-digit/ZIP+4 postal codes, and the 17 HHS restricted 3-digit ZIP prefixes).
   - Added index-preserving Unicode canonicalization defeating zero-width obfuscators (`U+200B`, `U+FEFF`, `U+00AD`), Unicode dashes, fullwidth ASCII, and Cyrillic/Greek homoglyphs.
-  - Hardened all PII regular expressions with bounded quantifiers and linear IPv6 structural validation to prevent ReDoS catastrophic backtracking.
+  - Hardened all PII regular expressions with bounded quantifiers, fixed sentence-ending period lookahead for emails, and upgraded overlap resolution and span replacement to O(M log M + N).
 * **Prompt-Injection Framing, Output PII Scan & Resilient Checkpoints**:
   - Framed untrusted research text inside `<UNTRUSTED_RESEARCH_RECORD>` delimiters with tag-breakout neutralization and hardened local runtime system prompts.
   - Added post-inference output PII leakage scanning (`output_pii_action = c("redact", "error", "warn", "none")`) in `airgap_extract()`, recording integer `output_pii_leaks` counts in manifests and audit logs.

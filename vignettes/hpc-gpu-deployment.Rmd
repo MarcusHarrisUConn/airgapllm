@@ -1,0 +1,205 @@
+---
+title: "HPC & GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{HPC & GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+Deploying open-weights LLMs (`Llama`, `Qwen`, `Gemma`, `Mistral`) on
+departmental GPU workstations or university HPC Slurm nodes introduces
+practical engineering challenges that go beyond calling a local HTTP port:
+
+- **GPU Out-of-Memory (OOM) Failures**: Selecting a quantization level and
+  context window that exceeds available VRAM.
+- **Strict Air-Gapping**: Ensuring Docker and Apptainer containers cannot make
+  outbound network calls, download telemetry, or escape mounted model
+  directories via symlinks.
+- **Long Qualitative Transcripts**: Therapy transcripts and semi-structured
+  interviews frequently exceed 4,096–8,192 tokens and require deterministic
+  overlapping chunking prior to extraction.
+- **Walltime Preemption & Schema Drift**: Resuming 50,000-row batches cleanly
+  after Slurm preemption while blocking accidental schema or prompt mismatches.
+
+```{r load}
+library(airgapllm)
+```
+
+## 1. Right-Sizing Workstation & HPC GPUs (`estimate_vram_requirements()`)
+
+Estimate total GPU memory (model weights + KV cache + runtime overhead) across
+quantizations and context windows before requesting GPU allocations:
+
+```{r vram}
+# 8B model in Q4_K_M with 8k context for a single lab workstation GPU
+vram_8b <- estimate_vram_requirements(
+  params_b = 8,
+  quantization = "Q4_K_M",
+  context_length = 8192L,
+  batch_size = 2L
+)
+vram_8b
+
+# Compare 70B Q4_K_M vs 14B Q8_0 for an HPC A100-80GB / L40S node
+estimate_vram_requirements(14, quantization = "Q8_0", context_length = 8192L, batch_size = 4L)
+estimate_vram_requirements(70, quantization = "Q4_K_M", context_length = 8192L, batch_size = 2L)
+```
+
+Inspect GPU tier headroom directly from `$fits_tiers`:
+
+```{r vram-tiers}
+vram_8b$fits_tiers
+```
+
+## 2. Hardened `--network none` Docker & HPC Apptainer Configurations
+
+Pin both the container image digest (`sha256:...`) and local model weight
+digest (`verify_model_digest()`) to guarantee reproducibility and tamper
+resistance across nodes:
+
+```{r container-configs}
+work_dir <- tempfile("airgap_hpc_vignette_")
+dir.create(work_dir)
+weights_file <- file.path(work_dir, "qwen2.5-14b-instruct-q4_K_M.gguf")
+writeBin(charToRaw("synthetic-local-gguf-weights-for-vignette"), weights_file)
+
+# Verify streaming SHA-256 (blocks symlinks & path escapes by default)
+w_ver <- verify_model_digest(weights_file, root_dir = work_dir)
+w_ver
+
+spec <- airgap_container_spec(
+  backend = "vllm",
+  image = "vllm/vllm-openai",
+  image_digest = paste0("sha256:", strrep("e", 64)),
+  model_dir = work_dir,
+  model_file = basename(weights_file),
+  model_digest = w_ver$actual_digest,
+  gpu = "nvidia",
+  gpu_devices = "device=0",
+  memory_limit = "48g",
+  shm_size = "8g",
+  user = "1000:1000"
+)
+
+# Emit Compose YAML (read-only rootfs, cap_drop ALL, offline telemetry flags)
+cat(emit_docker_compose(spec))
+```
+
+Generate the companion HPC Apptainer `.def` recipe with `--containall
+--no-home --net --network none --nv`:
+
+```{r apptainer}
+cat(emit_apptainer_def(spec))
+```
+
+Confirm container posture, weight integrity, endpoint loopback confinement,
+and absence of unbypassed outbound proxy variables before starting inference:
+
+```{r preflight}
+preflight_isolation_check(
+  spec = spec,
+  endpoint = "http://127.0.0.1:8000/v1",
+  model_path = weights_file
+)
+```
+
+## 3. Deterministic Chunking for Long Clinical Transcripts
+
+When transcripts exceed local context windows, split them deterministically
+along paragraph or sentence boundaries using `chunk_clinical_texts()` while
+retaining `doc_id`, `chunk_id`, and exact character offsets for downstream
+re-aggregation:
+
+```{r chunking}
+data("synthetic_notes", package = "airgapllm")
+long_record <- synthetic_notes[synthetic_notes$note_id == "SYN_016", ]
+
+chunks <- chunk_clinical_texts(
+  data = long_record,
+  text_col = "note_text",
+  id_col = "note_id",
+  max_chars = 340L,
+  overlap_chars = 50L,
+  split_on = "paragraph"
+)
+chunks[, c("doc_id", "chunk_id", "chunk_index", "n_chunks", "start_char", "end_char", "char_count")]
+```
+
+Run `airgap_extract()` directly over `chunks` using `id_col = "chunk_id"` so
+every chunk is independently PII-redacted, schema-validated, and checkpointed:
+
+```{r extract-chunks}
+chunk_schema <- extraction_schema(
+  topic = schema_field("enum", values = c("sleep", "coping", "logistics", "other")),
+  crisis_flag = schema_field("logical")
+)
+
+ck_file <- file.path(work_dir, "chunks_checkpoint.jsonl")
+chunk_res <- airgap_extract(
+  data = chunks,
+  text_col = "chunk_text",
+  schema = chunk_schema,
+  runtime = runtime_mock(seed = 77L),
+  id_col = "chunk_id",
+  checkpoint_path = ck_file,
+  container_spec = spec,
+  model_path = weights_file
+)
+
+chunk_res[, c("chunk_id", "topic", "crisis_flag", ".status")]
+```
+
+## 4. Checkpoint Schema-Drift Guards & Offline Troubleshooting
+
+If an analyst edits the extraction schema or prompt template mid-study and
+accidentally points `airgap_extract()` at an old `checkpoint_path` with
+`resume = TRUE`, `airgapllm` refuses to silently mix incompatible schemas:
+
+```{r schema-guard}
+modified_schema <- extraction_schema(
+  topic = schema_field("enum", values = c("sleep", "coping", "logistics", "other")),
+  severity = schema_field("integer", min = 0L, max = 5L)
+)
+
+tryCatch(
+  airgap_extract(
+    data = chunks,
+    text_col = "chunk_text",
+    schema = modified_schema,
+    runtime = runtime_mock(seed = 77L),
+    id_col = "chunk_id",
+    checkpoint_path = ck_file,
+    resume = TRUE
+  ),
+  airgap_checkpoint_error = function(e) {
+    message("Guardrail triggered: ", conditionMessage(e))
+  }
+)
+```
+
+### Offline Troubleshooting Checklist
+
+- **Proxy Pre-Flight Failure (`env_proxy_isolation`)**: On institutional HPC
+  login nodes that export `HTTP_PROXY` / `HTTPS_PROXY`, either unset proxy
+  variables inside your Slurm job script (`unset HTTP_PROXY HTTPS_PROXY ALL_PROXY`)
+  or explicitly include `NO_PROXY=127.0.0.1,localhost`.
+- **Legacy Clinical CSV Encoding Errors**: `airgapllm` automatically normalizes
+  Windows-1252 smart quotes and Latin-1 characters to valid UTF-8 prior to PII
+  scanning and JSON serialization.
+- **Symlinked Scratch Directories**: `verify_model_digest()` blocks symlinks
+  escaping `model_dir` by default (`allow_symlinks = FALSE`); store canonical
+  weight files directly inside the bound model directory.
+
+```{r cleanup, include = FALSE}
+unlink(work_dir, recursive = TRUE)
+```

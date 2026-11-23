@@ -17,3 +17,10 @@ An S3 object of class \code{"airgap_audit_log"} containing \code{path},
 Parses all entries in an \code{airgapllm} JSONL audit log into a structured list
 with a companion summary \code{tibble}.
 }
+\examples{
+tmp_log <- tempfile(fileext = ".jsonl")
+pf <- preflight_isolation_check(endpoint = "http://127.0.0.1:11434")
+audit_log_append(tmp_log, pf)
+audit_log_read(tmp_log)
+unlink(tmp_log)
+}

@@ -6,11 +6,38 @@
 \alias{airgapllm-package}
 \title{airgapllm: Verifiably Offline Containerized Local LLM Workflows}
 \description{
-Provides a privacy-first workbench for running verifiably offline, containerized local large language models ('Ollama', 'llama.cpp', and 'vLLM') on sensitive research data under 'IRB', 'HIPAA', and 'FERPA' protocols. Generates hardened 'Docker' and 'Apptainer' container configurations with network isolation and pinned 'SHA-256' image and model-weight digests, executes deterministic pure-R pre-inference PII detection, redaction, and keyed 'HMAC-SHA256' reversible pseudonymization, performs crash-resumable schema-enforced batch extraction into typed tibbles with structured repair retries, and maintains tamper-evident hash-chained 'JSONL' audit trails alongside 'IRB' protocol documentation.
+A privacy-first workbench for running reproducible, network-isolated local
+open-weights large language models (\code{Ollama}, \code{llama.cpp}, \code{vLLM}) on
+sensitive human-subjects research text governed by IRB, HIPAA, and FERPA
+protocols.
 }
+\section{Core Architectural Pillars}{
+
+\describe{
+\item{Air-Gapped Container Lifecycle Manager}{\code{\link[=airgap_container_spec]{airgap_container_spec()}},
+\code{\link[=emit_docker_run]{emit_docker_run()}}, \code{\link[=emit_docker_compose]{emit_docker_compose()}}, \code{\link[=emit_apptainer_def]{emit_apptainer_def()}},
+\code{\link[=verify_model_digest]{verify_model_digest()}}, \code{\link[=is_loopback_endpoint]{is_loopback_endpoint()}},
+\code{\link[=preflight_isolation_check]{preflight_isolation_check()}}, and \code{\link[=estimate_vram_requirements]{estimate_vram_requirements()}}.}
+\item{Pre-Inference Privacy & PII Engine}{\code{\link[=pii_default_entities]{pii_default_entities()}},
+\code{\link[=hipaa_restricted_zip3]{hipaa_restricted_zip3()}}, \code{\link[=pii_config]{pii_config()}}, \code{\link[=pii_detect]{pii_detect()}},
+\code{\link[=pii_redact]{pii_redact()}}, \code{\link[=pii_privacy_report]{pii_privacy_report()}}, \code{\link[=pii_audit_dataframe]{pii_audit_dataframe()}},
+\code{\link[=pii_vault_key]{pii_vault_key()}}, \code{\link[=pii_pseudonymize]{pii_pseudonymize()}}, \code{\link[=pii_reidentify]{pii_reidentify()}},
+\code{\link[=pii_vault_save]{pii_vault_save()}}, \code{\link[=pii_vault_load]{pii_vault_load()}}, and \code{\link[=pii_vault_rotate_key]{pii_vault_rotate_key()}}.}
+\item{Resumable Schema-Enforced Batch Extractor}{\code{\link[=chunk_clinical_texts]{chunk_clinical_texts()}},
+\code{\link[=schema_field]{schema_field()}}, \code{\link[=extraction_schema]{extraction_schema()}}, \code{\link[=as_json_schema]{as_json_schema()}},
+\code{\link[=validate_extraction]{validate_extraction()}}, \code{\link[=build_repair_prompt]{build_repair_prompt()}}, \code{\link[=runtime_ollama]{runtime_ollama()}},
+\code{\link[=runtime_openai_local]{runtime_openai_local()}}, \code{\link[=runtime_mock]{runtime_mock()}}, \code{\link[=airgap_extract]{airgap_extract()}}, and
+\code{\link[=extraction_manifest]{extraction_manifest()}}.}
+\item{Immutable Audit Trail & IRB Protocol Generator}{\code{\link[=audit_log_append]{audit_log_append()}},
+\code{\link[=audit_log_read]{audit_log_read()}}, \code{\link[=audit_log_verify]{audit_log_verify()}}, \code{\link[=generate_irb_narrative]{generate_irb_narrative()}},
+and \code{\link[=export_irb_compliance_packet]{export_irb_compliance_packet()}}.}
+}
+}
+
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://marcusharrisphd.com/airgapllm/}
   \item \url{https://github.com/MarcusHarrisUConn/airgapllm}
   \item Report bugs at \url{https://github.com/MarcusHarrisUConn/airgapllm/issues}
 }

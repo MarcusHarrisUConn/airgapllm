@@ -150,7 +150,8 @@ generate_irb_narrative <- function(
       "A total of **", total_pii, "** direct identifier span(s) across **", length(pii_counts), "** entity class(es) ",
       "were replaced with keyed tokens (`<<TYPE_HASH>>`) preserving within-corpus entity coreference without exposing ",
       "identifying strings to the language model. The re-identification mapping vault is stored separately from prompts, ",
-      "checkpoints, and audit logs using AES-256-CBC encryption with Encrypt-then-MAC HMAC-SHA256 authentication and ",
+      "checkpoints, and audit logs using AES-256-CBC encryption with RFC 5869 HKDF-SHA256 key separation, ",
+      "constant-time Encrypt-then-MAC HMAC-SHA256 authentication, per-save random salts/IVs, and ",
       "owner-only (`0600`) filesystem permissions."
     ),
     "verified_deidentified" = paste0(
@@ -176,6 +177,11 @@ generate_irb_narrative <- function(
   sec_privacy <- paste0(
     "### 2. Pre-Inference De-Identification & Privacy Safeguards\n\n",
     pii_prose, "\n\n",
+    "Input text is canonicalized against Unicode homoglyphs and zero-width obfuscators prior to scanning, ",
+    "including HIPAA Safe Harbor controls for ages > 89 and geographic ZIP codes (including the 17 restricted 3-digit prefixes). ",
+    "Untrusted research text is wrapped in explicit data-boundary delimiters to mitigate embedded prompt-injection attacks, ",
+    "and generated character outputs undergo post-inference PII leakage scanning (",
+    manifest$output_pii_leaks %||% 0L, " post-inference leak(s) detected/mitigated). ",
     "Neither raw participant text nor raw PII strings are persisted in crash-recovery checkpoints or compliance logs. ",
     "Audit log writes enforce a strict schema allowlist and automated PII scanning that aborts execution if any raw text ",
     "key or sensitive identifier is encountered."

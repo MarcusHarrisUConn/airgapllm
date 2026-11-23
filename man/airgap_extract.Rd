@@ -25,6 +25,8 @@ airgap_extract(
   container_spec = NULL,
   model_path = NULL,
   allow_internal_network = FALSE,
+  strict_proxy = TRUE,
+  output_pii_action = c("redact", "error", "warn", "none"),
   audit_log_path = NULL,
   run_id = NULL,
   progress = FALSE
@@ -94,6 +96,17 @@ pre-flight and recorded in the run manifest/audit trail. Defaults to
 
 \item{allow_internal_network}{Logical scalar passed to
 \code{\link[=preflight_isolation_check]{preflight_isolation_check()}}. Defaults to \code{FALSE}.}
+
+\item{strict_proxy}{Logical scalar passed to \code{\link[=preflight_isolation_check]{preflight_isolation_check()}}
+controlling whether unbypassed outbound proxy env vars fail closed.
+Defaults to \code{TRUE}.}
+
+\item{output_pii_action}{Character scalar controlling post-inference PII
+leakage scanning of generated character schema fields (defending against
+prompt-injected or memorized PII echo): \code{"redact"} (default, scrubs leaked
+PII before checkpointing/returning), \code{"error"} (aborts with
+\code{airgap_output_pii_error}), \code{"warn"}, or \code{"none"}. Automatically skipped
+when \code{pii_policy = "verified_deidentified"} unless explicitly requested.}
 
 \item{audit_log_path}{Optional path to an immutable hash-chained JSONL audit
 log appended via \code{\link[=audit_log_append]{audit_log_append()}}.}

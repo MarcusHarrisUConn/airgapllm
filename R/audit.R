@@ -39,6 +39,7 @@ audit_allowed_fields <- function() {
     "pii_policy",
     "pii_config_digest",
     "pii_counts",
+    "output_pii_leaks",
     "row_counts",
     "metadata",
     "prev_hash",
@@ -195,6 +196,16 @@ normalize_audit_entry <- function(entry, event_type = "extraction_run", metadata
     }
   }
 
+  # Validate output_pii_leaks if provided
+  out_leaks <- entry$output_pii_leaks
+  if (!is.null(out_leaks)) {
+    if (!is.numeric(out_leaks) || is.logical(out_leaks) || length(out_leaks) != 1L ||
+        is.na(out_leaks) || out_leaks < 0 || out_leaks != floor(out_leaks)) {
+      cli::cli_abort("Audit privacy violation: `output_pii_leaks` must be a non-negative integer.", class = "airgap_audit_privacy_error")
+    }
+    out_leaks <- as.integer(out_leaks)
+  }
+
   # 4. Scan metadata & scalar identifiers for accidental PII
   eff_meta <- metadata %||% entry$metadata
   if (!is.null(eff_meta)) {
@@ -251,6 +262,7 @@ normalize_audit_entry <- function(entry, event_type = "extraction_run", metadata
     pii_policy = entry$pii_policy,
     pii_config_digest = entry$pii_config_digest,
     pii_counts = pii_counts,
+    output_pii_leaks = out_leaks,
     row_counts = entry$row_counts,
     metadata = eff_meta
   )
@@ -455,9 +467,8 @@ audit_log_verify <- function(path, strict = TRUE) {
     ))
   }
 
-  raw_lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
-  raw_lines <- raw_lines[nzchar(trimws(raw_lines))]
-  n <- length(raw_lines)
+  raw_recs <- read_jsonl_raw_lines(path)
+  n <- length(raw_recs)
 
   if (n == 0L) {
     return(structure(
@@ -485,8 +496,13 @@ audit_log_verify <- function(path, strict = TRUE) {
   }
 
   for (i in seq_len(n)) {
+    item <- raw_recs[[i]]
+    if (isTRUE(item$has_nul) || !isTRUE(item$valid_utf8)) {
+      mark_bad(i, "Corrupted UTF-8 or embedded NUL byte detected.")
+      next
+    }
     rec <- tryCatch(
-      jsonlite::fromJSON(raw_lines[i], simplifyVector = FALSE),
+      jsonlite::fromJSON(item$text, simplifyVector = FALSE),
       error = function(e) NULL
     )
     if (is.null(rec) || !is.list(rec) || is.null(names(rec))) {
@@ -499,8 +515,8 @@ audit_log_verify <- function(path, strict = TRUE) {
       mark_bad(i, paste0("Sequence mismatch (expected seq=", i, ", found ", rec$seq %||% "NULL", ")."))
     }
 
-    # Check prev_hash linkage
-    if (!identical(rec$prev_hash, expected_prev)) {
+    # Check prev_hash linkage in constant time
+    if (!constant_time_equal(as.character(rec$prev_hash %||% ""), expected_prev)) {
       mark_bad(i, paste0("Broken chain link: prev_hash does not match expected '", expected_prev, "'."))
     }
 
@@ -518,7 +534,7 @@ audit_log_verify <- function(path, strict = TRUE) {
       }
     }
 
-    # Recompute entry_hash
+    # Recompute entry_hash and verify in constant time
     stored_hash <- rec$entry_hash
     if (!is_valid_sha256_digest(stored_hash)) {
       mark_bad(i, "Missing or invalid entry_hash.")
@@ -528,7 +544,7 @@ audit_log_verify <- function(path, strict = TRUE) {
 
     body <- rec[setdiff(names(rec), "entry_hash")]
     computed_hash <- sha256_object(body)
-    if (!identical(computed_hash, stored_hash)) {
+    if (!constant_time_equal(computed_hash, stored_hash)) {
       mark_bad(i, paste0("Hash mismatch (tampered entry): stored ", stored_hash, " != computed ", computed_hash, "."))
     }
 

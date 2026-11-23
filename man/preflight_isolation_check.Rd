@@ -11,6 +11,8 @@ preflight_isolation_check(
   expected_model_digest = NULL,
   allow_internal_network = FALSE,
   check_proxies = TRUE,
+  strict_proxy = TRUE,
+  allow_symlinks = FALSE,
   signing_key = NULL,
   error_on_fail = FALSE
 )
@@ -29,8 +31,17 @@ preflight_isolation_check(
 requires \code{spec$network_mode == "none"}. If \code{TRUE}, also permits
 \code{network_mode == "internal"} when \code{host_bind} is strictly loopback.}
 
-\item{check_proxies}{Logical scalar; inspect \code{HTTP_PROXY}/\code{HTTPS_PROXY}/
-\code{ALL_PROXY} environment variables. Defaults to \code{TRUE}.}
+\item{check_proxies}{Logical scalar; inspect outbound proxy environment
+variables (\code{HTTP_PROXY}, \code{HTTPS_PROXY}, \code{ALL_PROXY}, \code{FTP_PROXY},
+\code{SOCKS_PROXY}, case-insensitive). Defaults to \code{TRUE}.}
+
+\item{strict_proxy}{Logical scalar; if \code{TRUE} (default), active outbound
+proxy variables without explicit \verb{127.0.0.1} and \code{localhost} entries in
+\code{NO_PROXY} cause pre-flight verification to fail closed. Set to \code{FALSE} to
+downgrade proxy exposure to an advisory warning.}
+
+\item{allow_symlinks}{Logical scalar passed to \code{\link[=verify_model_digest]{verify_model_digest()}} when
+verifying \code{model_path}. Defaults to \code{FALSE}.}
 
 \item{signing_key}{Optional secret key (character or raw) to attach an
 HMAC-SHA256 attestation signature to the verification record.}

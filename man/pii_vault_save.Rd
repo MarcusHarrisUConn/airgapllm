@@ -21,9 +21,11 @@ Invisibly returns \code{path}.
 }
 \description{
 Persists an \code{airgap_pii_vault} to disk separately from model prompts and
-audit logs. When \code{encrypt = TRUE} (the default), serializes the vault with
-AES-256-CBC encryption and Encrypt-then-MAC HMAC-SHA256 authentication, and
-restricts file permissions to owner-only (\code{0600}).
+audit logs. When \code{encrypt = TRUE} (the default), derives fresh independent
+encryption and authentication keys via RFC 5869 HKDF-SHA256 using a per-save
+random salt and fresh 128-bit IV, encrypts with AES-256-CBC, authenticates
+envelope metadata + salt + IV + ciphertext via Encrypt-then-MAC HMAC-SHA256,
+and enforces owner-only (\code{0600}) file permissions.
 }
 \examples{
 key <- pii_vault_key()

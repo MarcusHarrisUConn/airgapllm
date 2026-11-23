@@ -8,7 +8,9 @@ verify_model_digest(
   path,
   expected_digest = NULL,
   algorithm = "sha256",
-  error_on_mismatch = FALSE
+  error_on_mismatch = FALSE,
+  root_dir = NULL,
+  allow_symlinks = FALSE
 )
 }
 \arguments{
@@ -23,6 +25,12 @@ paths to SHA-256 digests (for a directory).}
 
 \item{error_on_mismatch}{Logical scalar; if \code{TRUE} and verification fails,
 aborts with an \code{airgap_digest_error}. Defaults to \code{FALSE}.}
+
+\item{root_dir}{Optional directory path that \code{path} must remain strictly
+confined within (blocks symlink escapes and path traversal).}
+
+\item{allow_symlinks}{Logical scalar; if \code{FALSE} (default), rejects any
+symbolic links encountered at \code{path} or inside a model directory.}
 }
 \value{
 An S3 object of class \code{"airgap_digest_verification"} containing

@@ -119,6 +119,7 @@ airgap_container_spec <- function(
     image <- defs$image
   }
   assert_scalar_string(image, "image")
+  assert_no_control_chars(image, "image")
 
   # Allow embedded image@sha256:... syntax
   if (grepl("@", image, fixed = TRUE)) {
@@ -129,7 +130,7 @@ airgap_container_spec <- function(
     embedded_digest <- normalize_sha256_digest(parts[2L])
     if (!is.null(image_digest)) {
       norm_arg <- normalize_sha256_digest(image_digest)
-      if (!identical(embedded_digest, norm_arg)) {
+      if (!constant_time_equal(embedded_digest, norm_arg)) {
         cli::cli_abort(
           "Digest embedded in {.arg image} does not match {.arg image_digest}.",
           class = "airgap_validation_error"
@@ -142,8 +143,9 @@ airgap_container_spec <- function(
     image_digest <- normalize_sha256_digest(image_digest)
   }
 
-  assert_scalar_string(model_dir, "model_dir")
-  if (!is.null(model_file)) assert_scalar_string(model_file, "model_file")
+  assert_safe_container_image(image, "image")
+  assert_safe_host_path(model_dir, "model_dir", forbid_colon = TRUE)
+  if (!is.null(model_file)) assert_safe_model_file(model_file, "model_file")
   if (!is.null(model_digest)) model_digest <- normalize_sha256_digest(model_digest)
 
   if (is.null(port)) {
@@ -155,30 +157,31 @@ airgap_container_spec <- function(
     port <- as.integer(port)
   }
 
-  assert_scalar_string(host_bind, "host_bind")
-  if (!is.null(socket_path)) assert_scalar_string(socket_path, "socket_path")
-  assert_scalar_string(gpu_devices, "gpu_devices")
-  if (!is.null(memory_limit)) assert_scalar_string(memory_limit, "memory_limit")
+  assert_safe_token(host_bind, "host_bind", "^[A-Za-z0-9.:\\[\\]-]{1,64}$", "an IP address or hostname token")
+  if (!is.null(socket_path)) assert_safe_host_path(socket_path, "socket_path", forbid_colon = TRUE)
+  assert_safe_token(gpu_devices, "gpu_devices", "^(all|device=[0-9]+(,[0-9]+)*|[0-9]+(,[0-9]+)*)$", "'all' or GPU device selector")
+  if (!is.null(memory_limit)) assert_safe_token(memory_limit, "memory_limit", "^[0-9]+(?:\\.[0-9]+)?[bBkKmMgGtT]?$", "a Docker memory limit (e.g., '32g')")
   if (!is.null(cpus)) {
-    if (!is.numeric(cpus) || length(cpus) != 1L || is.na(cpus) || cpus <= 0) {
+    if (!is.numeric(cpus) || length(cpus) != 1L || is.na(cpus) || !is.finite(cpus) || cpus <= 0) {
       cli::cli_abort("{.arg cpus} must be a positive number.", class = "airgap_validation_error")
     }
   }
-  if (!is.null(shm_size)) assert_scalar_string(shm_size, "shm_size")
+  if (!is.null(shm_size)) assert_safe_token(shm_size, "shm_size", "^[0-9]+(?:\\.[0-9]+)?[bBkKmMgGtT]?$", "a Docker size limit (e.g., '4g')")
   assert_scalar_logical(read_only, "read_only")
-  assert_scalar_string(network_mode, "network_mode")
+  assert_safe_token(network_mode, "network_mode", "^[A-Za-z0-9_.-]{1,64}$", "a Docker network mode identifier")
   if (!is.character(cap_drop)) {
     cli::cli_abort("{.arg cap_drop} must be a character vector.", class = "airgap_validation_error")
   }
-  assert_scalar_logical(no_new_privileges, "no_new_privileges")
-  if (!is.null(user)) assert_scalar_string(user, "user")
-  assert_scalar_string(tmpfs_size, "tmpfs_size")
-  if (!is.character(extra_args)) {
-    cli::cli_abort("{.arg extra_args} must be a character vector.", class = "airgap_validation_error")
+  for (cap in cap_drop) {
+    assert_safe_token(cap, "cap_drop", "^[A-Za-z0-9_]{1,64}$", "a Linux capability name (e.g., 'ALL')")
   }
-  if (!is.null(container_name)) assert_scalar_string(container_name, "container_name")
+  assert_scalar_logical(no_new_privileges, "no_new_privileges")
+  if (!is.null(user)) assert_safe_token(user, "user", "^[A-Za-z0-9_-]{1,64}(?::[A-Za-z0-9_-]{1,64})?$", "'uid:gid' or username")
+  assert_safe_token(tmpfs_size, "tmpfs_size", "^[0-9]+(?:\\.[0-9]+)?[bBkKmMgGtT]?$", "a tmpfs size limit (e.g., '512m')")
+  assert_safe_extra_args(extra_args)
+  if (!is.null(container_name)) assert_safe_token(container_name, "container_name", "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$", "a valid Docker container name")
 
-  # Normalize env to named character list
+  # Normalize and strictly sanitize env to named character list
   if (is.character(env) && length(env) > 0L) {
     if (is.null(names(env)) || any(!nzchar(names(env)))) {
       cli::cli_abort("{.arg env} must be a named list or named character vector.", class = "airgap_validation_error")
@@ -191,6 +194,9 @@ airgap_container_spec <- function(
     env <- lapply(env, as.character)
   } else if (!is.list(env)) {
     cli::cli_abort("{.arg env} must be a named list or named character vector.", class = "airgap_validation_error")
+  }
+  for (nm in names(env)) {
+    assert_safe_env_entry(nm, env[[nm]])
   }
 
   spec_core <- list(
@@ -274,7 +280,7 @@ build_container_env <- function(spec) {
 #' @noRd
 build_backend_cmd <- function(spec) {
   model_arg <- if (!is.null(spec$model_file)) {
-    file.path(spec$container_model_dir, basename(spec$model_file))
+    file.path(spec$container_model_dir, spec$model_file)
   } else {
     spec$container_model_dir
   }
@@ -484,7 +490,7 @@ emit_docker_compose <- function(
   if (is.null(service_name)) {
     service_name <- paste0("airgap-", gsub("[^a-z0-9]+", "-", tolower(spec$backend)))
   }
-  assert_scalar_string(service_name, "service_name")
+  assert_safe_token(service_name, "service_name", "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "a valid Compose service name")
 
   volumes <- list(paste0(spec$model_dir, ":", spec$container_model_dir, ":ro"))
   if (!is.null(spec$socket_path)) {
@@ -607,11 +613,12 @@ emit_apptainer_def <- function(spec, file = NULL, require_pinned = TRUE) {
     "none" = ""
   )
 
+  quoted_cmd <- vapply(build_backend_cmd(spec), sh_quote_posix, character(1L))
   backend_exec <- switch(
     spec$backend,
-    "ollama" = paste(c("exec ollama", build_backend_cmd(spec), '"$@"'), collapse = " "),
-    "llama.cpp" = paste(c("exec llama-server", build_backend_cmd(spec), '"$@"'), collapse = " "),
-    "vllm" = paste(c("exec vllm serve", build_backend_cmd(spec), '"$@"'), collapse = " ")
+    "ollama" = paste(c("exec ollama", quoted_cmd, '"$@"'), collapse = " "),
+    "llama.cpp" = paste(c("exec llama-server", quoted_cmd, '"$@"'), collapse = " "),
+    "vllm" = paste(c("exec vllm serve", quoted_cmd, '"$@"'), collapse = " ")
   )
 
   sif_name <- paste0("airgapllm-", gsub("[^a-z0-9]+", "-", tolower(spec$backend)), ".sif")
@@ -688,6 +695,10 @@ sha256_file_stream <- function(path) {
 #' @param algorithm Hash algorithm; currently `"sha256"`.
 #' @param error_on_mismatch Logical scalar; if `TRUE` and verification fails,
 #'   aborts with an `airgap_digest_error`. Defaults to `FALSE`.
+#' @param root_dir Optional directory path that `path` must remain strictly
+#'   confined within (blocks symlink escapes and path traversal).
+#' @param allow_symlinks Logical scalar; if `FALSE` (default), rejects any
+#'   symbolic links encountered at `path` or inside a model directory.
 #'
 #' @return An S3 object of class `"airgap_digest_verification"` containing
 #'   `path`, `is_directory`, `algorithm`, `actual_digest`, `expected_digest`,
@@ -704,12 +715,21 @@ verify_model_digest <- function(
   path,
   expected_digest = NULL,
   algorithm = "sha256",
-  error_on_mismatch = FALSE
+  error_on_mismatch = FALSE,
+  root_dir = NULL,
+  allow_symlinks = FALSE
 ) {
   assert_scalar_string(path, "path")
   algorithm <- match.arg(algorithm, choices = "sha256")
   assert_scalar_logical(error_on_mismatch, "error_on_mismatch")
+  assert_scalar_logical(allow_symlinks, "allow_symlinks")
 
+  if (!file.exists(path) && !is_symlink_path(path)) {
+    cli::cli_abort("Model path does not exist: {.path {path}}.", class = "airgap_digest_error")
+  }
+
+  # Enforce path traversal & symlink containment BEFORE opening any bytes
+  assert_path_confined(path, root_dir = root_dir, allow_symlinks = allow_symlinks)
   if (!file.exists(path)) {
     cli::cli_abort("Model path does not exist: {.path {path}}.", class = "airgap_digest_error")
   }
@@ -721,7 +741,7 @@ verify_model_digest <- function(
     actual_digest <- sha256_file_stream(norm_path)
     sz <- as.numeric(file.info(norm_path)$size)
     exp_norm <- if (!is.null(expected_digest)) normalize_sha256_digest(expected_digest) else NULL
-    matched <- if (is.null(exp_norm)) NA else identical(actual_digest, exp_norm)
+    matched <- if (is.null(exp_norm)) NA else constant_time_equal(actual_digest, exp_norm)
     files_tbl <- tibble::tibble(
       file = basename(norm_path),
       size_bytes = sz,
@@ -730,11 +750,20 @@ verify_model_digest <- function(
       matched = matched
     )
   } else {
+    # Inspect all directory entries (including symlinked dirs/files) before hashing
+    raw_entries <- sort(list.files(norm_path, recursive = TRUE, all.files = FALSE, include.dirs = TRUE))
+    for (ent in raw_entries) {
+      assert_path_confined(file.path(norm_path, ent), root_dir = norm_path, allow_symlinks = allow_symlinks)
+    }
+
     rel_files <- sort(list.files(norm_path, recursive = TRUE, all.files = FALSE, include.dirs = FALSE))
     if (length(rel_files) == 0L) {
       cli::cli_abort("Model directory contains no files: {.path {path}}.", class = "airgap_digest_error")
     }
     full_files <- file.path(norm_path, rel_files)
+    for (ff in full_files) {
+      assert_path_confined(ff, root_dir = norm_path, allow_symlinks = allow_symlinks)
+    }
     file_digests <- vapply(full_files, sha256_file_stream, character(1L))
     file_sizes <- as.numeric(file.info(full_files)$size)
     sz <- sum(file_sizes)
@@ -751,7 +780,9 @@ verify_model_digest <- function(
     } else if (!is.null(names(expected_digest)) && length(expected_digest) >= 1L) {
       exp_norm <- vapply(expected_digest, normalize_sha256_digest, character(1L))
       file_exp <- unname(exp_norm[rel_files])
-      file_matched <- !is.na(file_exp) & (file_digests == file_exp)
+      file_matched <- vapply(seq_along(rel_files), function(k) {
+        !is.na(file_exp[k]) && constant_time_equal(file_digests[k], file_exp[k])
+      }, logical(1L))
       missing_expected <- setdiff(names(exp_norm), rel_files)
       extra_files <- setdiff(rel_files, names(exp_norm))
       matched <- all(file_matched) && length(missing_expected) == 0L && length(extra_files) == 0L
@@ -759,7 +790,7 @@ verify_model_digest <- function(
       exp_norm <- normalize_sha256_digest(expected_digest)
       file_exp <- rep(NA_character_, length(rel_files))
       file_matched <- rep(NA, length(rel_files))
-      matched <- identical(actual_digest, exp_norm)
+      matched <- constant_time_equal(actual_digest, exp_norm)
     }
 
     files_tbl <- tibble::tibble(
@@ -837,90 +868,10 @@ is_loopback_endpoint <- function(endpoint) {
   isTRUE(info$allowed)
 }
 
-#' Internal strict endpoint parser returning detailed classification
+#' Internal strict endpoint parser delegating to centralized SSRF guard
 #' @noRd
 classify_endpoint <- function(endpoint) {
-  if (inherits(endpoint, "airgap_runtime")) {
-    endpoint <- endpoint$endpoint
-  }
-  if (!is.character(endpoint) || length(endpoint) != 1L || is.na(endpoint) || !nzchar(trimws(endpoint))) {
-    return(list(allowed = FALSE, endpoint_class = "invalid", host = NA_character_, reason = "Endpoint is empty or non-character."))
-  }
-
-  ep <- trimws(endpoint)
-  if (grepl("[[:space:]]", ep)) {
-    return(list(allowed = FALSE, endpoint_class = "invalid", host = NA_character_, reason = "Endpoint contains whitespace."))
-  }
-
-  if (identical(tolower(ep), "mock://offline")) {
-    return(list(allowed = TRUE, endpoint_class = "offline_mock", host = "offline", reason = "Built-in offline mock runtime."))
-  }
-
-  if (grepl("^unix:///", ep, ignore.case = TRUE)) {
-    sock_path <- sub("^unix://", "", ep, ignore.case = TRUE)
-    if (grepl("\\.\\.", sock_path)) {
-      return(list(allowed = FALSE, endpoint_class = "invalid", host = NA_character_, reason = "Unix socket path contains '..' traversal."))
-    }
-    return(list(allowed = TRUE, endpoint_class = "unix_socket", host = "unix", reason = "Local Unix domain socket."))
-  }
-
-  if (!grepl("^https?://", ep, ignore.case = TRUE)) {
-    return(list(allowed = FALSE, endpoint_class = "disallowed_scheme", host = NA_character_, reason = "Only http://, https://, unix:///, or mock://offline endpoints are permitted."))
-  }
-
-  rest <- sub("^https?://", "", ep, ignore.case = TRUE)
-  authority <- sub("[/?#].*$", "", rest)
-  if (!nzchar(authority)) {
-    return(list(allowed = FALSE, endpoint_class = "invalid", host = NA_character_, reason = "Missing authority/host component."))
-  }
-
-  # Reject userinfo (@) completely to prevent credential/spoofing tricks
-  if (grepl("@", authority, fixed = TRUE)) {
-    return(list(allowed = FALSE, endpoint_class = "remote_rejected", host = authority, reason = "Userinfo ('@') is prohibited in local air-gapped endpoints."))
-  }
-
-  # Parse IPv6 bracketed host or host[:port]
-  if (startsWith(authority, "[")) {
-    m <- regexec("^\\[([^\\]]+)\\](?::([0-9]+))?$", authority, perl = TRUE)
-    parts <- regmatches(authority, m)[[1L]]
-    if (length(parts) == 0L) {
-      return(list(allowed = FALSE, endpoint_class = "invalid", host = authority, reason = "Malformed IPv6 authority."))
-    }
-    host <- tolower(parts[2L])
-    port_str <- if (length(parts) >= 3L) parts[3L] else ""
-  } else {
-    if (grepl(":", authority, fixed = TRUE)) {
-      m <- regexec("^([^:]+):([0-9]+)$", authority, perl = TRUE)
-      parts <- regmatches(authority, m)[[1L]]
-      if (length(parts) == 0L) {
-        return(list(allowed = FALSE, endpoint_class = "invalid", host = authority, reason = "Malformed host:port authority."))
-      }
-      host <- tolower(parts[2L])
-      port_str <- parts[3L]
-    } else {
-      host <- tolower(authority)
-      port_str <- ""
-    }
-  }
-
-  if (nzchar(port_str)) {
-    p <- suppressWarnings(as.integer(port_str))
-    if (is.na(p) || p < 1L || p > 65535L) {
-      return(list(allowed = FALSE, endpoint_class = "invalid", host = host, reason = "Invalid port number."))
-    }
-  }
-
-  allowed_hosts <- c("127.0.0.1", "localhost", "::1")
-  if (host %in% allowed_hosts) {
-    return(list(allowed = TRUE, endpoint_class = "loopback", host = host, reason = paste0("Verified loopback host (", host, ").")))
-  }
-
-  list(
-    allowed = FALSE,
-    endpoint_class = "remote_rejected",
-    host = host,
-    reason = paste0("Non-loopback host rejected under air-gap policy: '", host, "'.")
-  )
+  classify_endpoint_strict(endpoint)
 }
 
 #' Run Pre-Flight Air-Gap Isolation and Integrity Verification
@@ -941,8 +892,15 @@ classify_endpoint <- function(endpoint) {
 #' @param allow_internal_network Logical scalar; if `FALSE` (default),
 #'   requires `spec$network_mode == "none"`. If `TRUE`, also permits
 #'   `network_mode == "internal"` when `host_bind` is strictly loopback.
-#' @param check_proxies Logical scalar; inspect `HTTP_PROXY`/`HTTPS_PROXY`/
-#'   `ALL_PROXY` environment variables. Defaults to `TRUE`.
+#' @param check_proxies Logical scalar; inspect outbound proxy environment
+#'   variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `FTP_PROXY`,
+#'   `SOCKS_PROXY`, case-insensitive). Defaults to `TRUE`.
+#' @param strict_proxy Logical scalar; if `TRUE` (default), active outbound
+#'   proxy variables without explicit `127.0.0.1` and `localhost` entries in
+#'   `NO_PROXY` cause pre-flight verification to fail closed. Set to `FALSE` to
+#'   downgrade proxy exposure to an advisory warning.
+#' @param allow_symlinks Logical scalar passed to [verify_model_digest()] when
+#'   verifying `model_path`. Defaults to `FALSE`.
 #' @param signing_key Optional secret key (character or raw) to attach an
 #'   HMAC-SHA256 attestation signature to the verification record.
 #' @param error_on_fail Logical scalar; if `TRUE`, aborts with an
@@ -969,11 +927,15 @@ preflight_isolation_check <- function(
   expected_model_digest = NULL,
   allow_internal_network = FALSE,
   check_proxies = TRUE,
+  strict_proxy = TRUE,
+  allow_symlinks = FALSE,
   signing_key = NULL,
   error_on_fail = FALSE
 ) {
   assert_scalar_logical(allow_internal_network, "allow_internal_network")
   assert_scalar_logical(check_proxies, "check_proxies")
+  assert_scalar_logical(strict_proxy, "strict_proxy")
+  assert_scalar_logical(allow_symlinks, "allow_symlinks")
   assert_scalar_logical(error_on_fail, "error_on_fail")
 
   if (!is.null(spec) && !inherits(spec, "airgap_container_spec")) {
@@ -1096,38 +1058,51 @@ preflight_isolation_check <- function(
     )
   }
 
-  # 3. Model weight SHA-256 verification
+  # 3. Model weight SHA-256 verification (with symlink & model_dir confinement)
   exp_model <- expected_model_digest %||% (if (!is.null(spec)) spec$model_digest else NULL)
+  eff_root <- if (!is.null(spec) && dir.exists(spec$model_dir)) spec$model_dir else NULL
   if (!is.null(model_path)) {
-    if (!file.exists(model_path)) {
+    if (!file.exists(model_path) && !is_symlink_path(model_path)) {
       add_check(
         "model_digest_verified",
         "fail",
         "required",
         paste0("Model path does not exist: ", model_path)
       )
-    } else if (is.null(exp_model)) {
-      ver <- verify_model_digest(model_path)
-      model_digest_verified <- ver$actual_digest
-      add_check(
-        "model_digest_verified",
-        "fail",
-        "required",
-        "Model weights found on disk, but no expected SHA-256 digest was pinned for verification."
-      )
     } else {
-      ver <- verify_model_digest(model_path, expected_digest = exp_model, error_on_mismatch = FALSE)
-      model_digest_verified <- ver$actual_digest
-      add_check(
-        "model_digest_verified",
-        if (isTRUE(ver$matched)) "pass" else "fail",
-        "required",
-        if (isTRUE(ver$matched)) {
-          paste0("Model weights verified against pinned SHA-256 (", ver$actual_digest, ").")
-        } else {
-          paste0("Model weight SHA-256 MISMATCH (actual: ", ver$actual_digest, ").")
-        }
+      ver <- tryCatch(
+        verify_model_digest(
+          model_path,
+          expected_digest = exp_model,
+          error_on_mismatch = FALSE,
+          root_dir = eff_root,
+          allow_symlinks = allow_symlinks
+        ),
+        error = function(e) structure(list(message = conditionMessage(e)), class = "airgap_pf_err")
       )
+      if (inherits(ver, "airgap_pf_err")) {
+        add_check("model_digest_verified", "fail", "required", ver$message)
+      } else if (is.null(exp_model)) {
+        model_digest_verified <- ver$actual_digest
+        add_check(
+          "model_digest_verified",
+          "fail",
+          "required",
+          "Model weights found on disk, but no expected SHA-256 digest was pinned for verification."
+        )
+      } else {
+        model_digest_verified <- ver$actual_digest
+        add_check(
+          "model_digest_verified",
+          if (isTRUE(ver$matched)) "pass" else "fail",
+          "required",
+          if (isTRUE(ver$matched)) {
+            paste0("Model weights verified against pinned SHA-256 (", ver$actual_digest, ").")
+          } else {
+            paste0("Model weight SHA-256 MISMATCH (actual: ", ver$actual_digest, ").")
+          }
+        )
+      }
     }
   } else if (!is.null(exp_model)) {
     pin_m <- is_valid_sha256_digest(exp_model)
@@ -1144,28 +1119,27 @@ preflight_isolation_check <- function(
     )
   }
 
-  # 4. Proxy environment variable audit (advisory unless misconfigured)
+  # 4. Outbound proxy environment variable audit (case-insensitive; fails closed when strict_proxy = TRUE)
   if (isTRUE(check_proxies)) {
-    proxy_vars <- c("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
-    active_proxies <- proxy_vars[nzchar(Sys.getenv(proxy_vars, unset = ""))]
-    no_proxy <- paste(Sys.getenv(c("NO_PROXY", "no_proxy"), unset = ""), collapse = ",")
-    has_local_bypass <- grepl("127\\.0\\.0\\.1", no_proxy) && grepl("localhost", no_proxy, ignore.case = TRUE)
-
-    if (length(active_proxies) == 0L) {
-      add_check("env_proxy_isolation", "pass", "advisory", "No outbound HTTP/HTTPS/ALL proxy environment variables detected.")
-    } else if (has_local_bypass) {
+    prox <- detect_outbound_proxies()
+    if (length(prox$active_vars) == 0L) {
+      add_check("env_proxy_isolation", "pass", "required", "No outbound proxy environment variables detected.")
+    } else if (isTRUE(prox$has_local_bypass)) {
       add_check(
         "env_proxy_isolation",
         "pass",
-        "advisory",
-        paste0("Proxy variables set (", paste(active_proxies, collapse = ", "), "), with localhost/127.0.0.1 in NO_PROXY; HTTP runtimes also force noproxy='*'.")
+        "required",
+        paste0("Proxy variables set (", paste(prox$active_vars, collapse = ", "), "), with 127.0.0.1 and localhost explicitly in NO_PROXY; HTTP runtimes also force noproxy='*'.")
       )
     } else {
       add_check(
         "env_proxy_isolation",
-        "warn",
-        "advisory",
-        paste0("Outbound proxy variables active (", paste(active_proxies, collapse = ", "), ") without localhost/127.0.0.1 in NO_PROXY; airgapllm HTTP runtimes force noproxy='*'.")
+        if (isTRUE(strict_proxy)) "fail" else "warn",
+        if (isTRUE(strict_proxy)) "required" else "advisory",
+        paste0(
+          "Outbound proxy variable(s) active (", paste(prox$active_vars, collapse = ", "),
+          ") without explicit 127.0.0.1 and localhost bypass in NO_PROXY."
+        )
       )
     }
   }

@@ -294,13 +294,21 @@ test_that("preflight_isolation_check verifies hardened posture, model SHA, proxi
   expect_match(pf_ok$signature, "^hmac-sha256:[0-9a-f]{64}$")
   expect_output(print(pf_ok), "PASS")
 
-  # Proxy advisory warning when HTTP_PROXY is set without NO_PROXY
-  pf_proxy <- withr::with_envvar(
+  # Outbound proxy fails closed by default (strict_proxy = TRUE), warns when strict_proxy = FALSE
+  pf_proxy_strict <- withr::with_envvar(
     c(HTTP_PROXY = "http://corp-proxy:3128", NO_PROXY = "", no_proxy = ""),
     preflight_isolation_check(spec = good_spec, endpoint = "http://127.0.0.1:11434")
   )
-  expect_true(pf_proxy$passed)
-  proxy_row <- pf_proxy$checks[pf_proxy$checks$check_id == "env_proxy_isolation", ]
+  expect_false(pf_proxy_strict$passed)
+  proxy_row_s <- pf_proxy_strict$checks[pf_proxy_strict$checks$check_id == "env_proxy_isolation", ]
+  expect_equal(proxy_row_s$status, "fail")
+
+  pf_proxy_warn <- withr::with_envvar(
+    c(HTTP_PROXY = "http://corp-proxy:3128", NO_PROXY = "", no_proxy = ""),
+    preflight_isolation_check(spec = good_spec, endpoint = "http://127.0.0.1:11434", strict_proxy = FALSE)
+  )
+  expect_true(pf_proxy_warn$passed)
+  proxy_row <- pf_proxy_warn$checks[pf_proxy_warn$checks$check_id == "env_proxy_isolation", ]
   expect_equal(proxy_row$status, "warn")
 
   # Insecure spec checks catch every misconfiguration

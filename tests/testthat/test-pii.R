@@ -7,7 +7,8 @@ test_that("pii_detect and pii_redact handle all built-in PII entity classes accu
     "Patient ID: PT-884210 and MRN: 9920145 and Student ID #STU-44102.",
     "Logged from 192.168.10.42 and 2001:db8::1 (not 999.999.1.1).",
     "Lives at 742 Evergreen Terrace, Apt 4B, Hartford, CT 06103 or P.O. Box 902.",
-    "Patient: Sarah O'Connor met with Prof. Marcus Harris and Jean-Luc Picard."
+    "Patient: Sarah O'Connor met with Prof. Marcus Harris and Jean-Luc Picard.",
+    "Participant is a 93-year-old residing in ZIP: 06103 (restricted prefix ZIP 036xx)."
   )
 
   det <- pii_detect(samples)

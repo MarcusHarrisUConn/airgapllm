@@ -15,10 +15,12 @@ pii_default_entities <- function() {
     "email",
     "ssn",
     "street_address",
+    "zip_code",
     "mrn_id",
     "ip_address",
     "phone",
     "date",
+    "age_over_89",
     "person_name"
   )
 }
@@ -225,7 +227,7 @@ escape_regex <- function(x) {
   gsub("([.\\^$|()*+?{}\\[\\]\\\\])", "\\\\\\1", x, perl = TRUE)
 }
 
-#' Run a single PCRE pattern on one string and return span list
+#' Run a single PCRE pattern on one string and return span list (vectorized C-level slicing)
 #' @noRd
 match_spans_regex <- function(text, pattern, entity_type, priority, capture_group = 0L, filter_fn = NULL) {
   if (!nzchar(text)) return(list())
@@ -243,64 +245,111 @@ match_spans_regex <- function(text, pattern, entity_type, priority, capture_grou
     lens <- as.integer(attr(m, "match.length"))
   }
 
-  out <- vector("list", length(starts))
-  k <- 0L
-  for (i in seq_along(starts)) {
-    st <- starts[i]
-    ln <- lens[i]
-    if (is.na(st) || st < 1L || is.na(ln) || ln < 1L) next
-    en <- st + ln - 1L
-    val <- substr(text, st, en)
-    if (!is.null(filter_fn) && !isTRUE(filter_fn(val, text, st, en))) next
-    k <- k + 1L
-    out[[k]] <- list(
+  valid_idx <- which(!is.na(starts) & starts >= 1L & !is.na(lens) & lens >= 1L)
+  if (length(valid_idx) == 0L) return(list())
+
+  starts <- starts[valid_idx]
+  lens <- lens[valid_idx]
+  ends <- starts + lens - 1L
+  vals <- substring(text, starts, ends)
+
+  if (!is.null(filter_fn)) {
+    keep <- vapply(seq_along(vals), function(i) {
+      isTRUE(filter_fn(vals[i], text, starts[i], ends[i]))
+    }, logical(1L))
+    if (!any(keep)) return(list())
+    starts <- starts[keep]
+    ends <- ends[keep]
+    lens <- lens[keep]
+    vals <- vals[keep]
+  }
+
+  lapply(seq_along(starts), function(i) {
+    list(
       entity_type = entity_type,
-      start = st,
-      end = en,
-      length = ln,
-      match = val,
+      start = starts[i],
+      end = ends[i],
+      length = lens[i],
+      match = vals[i],
       priority = priority
     )
-  }
-  if (k == 0L) list() else out[seq_len(k)]
+  })
 }
 
-#' Resolve overlapping PII spans deterministically by priority, length, and position
+#' Resolve overlapping PII spans deterministically in O(M log M) time
 #' @noRd
 resolve_overlapping_spans <- function(spans) {
-  if (length(spans) <= 1L) return(spans)
+  n_sp <- length(spans)
+  if (n_sp <= 1L) return(spans)
 
   pri <- vapply(spans, `[[`, integer(1L), "priority")
   len <- vapply(spans, `[[`, integer(1L), "length")
   st <- vapply(spans, `[[`, integer(1L), "start")
+  en <- vapply(spans, `[[`, integer(1L), "end")
 
   # Lower priority integer = higher precedence; longer span wins ties; earlier start wins ties
   ord <- order(pri, -len, st)
   spans <- spans[ord]
+  st <- st[ord]
+  en <- en[ord]
 
-  kept <- list()
-  for (sp in spans) {
-    overlaps <- FALSE
-    for (k in kept) {
-      if (sp$start <= k$end && sp$end >= k$start) {
-        overlaps <- TRUE
-        break
-      }
+  # Pre-allocate sorted kept intervals for O(1) append fast-path + O(log M) findInterval check
+  kept_idx <- integer(n_sp)
+  kept_s <- integer(n_sp)
+  kept_e <- integer(n_sp)
+  n_kept <- 0L
+  max_end <- 0L
+
+  for (i in seq_len(n_sp)) {
+    s_i <- st[i]
+    e_i <- en[i]
+
+    if (n_kept == 0L || s_i > max_end) {
+      n_kept <- n_kept + 1L
+      kept_idx[n_kept] <- i
+      kept_s[n_kept] <- s_i
+      kept_e[n_kept] <- e_i
+      max_end <- e_i
+      next
     }
-    if (!overlaps) {
-      kept[[length(kept) + 1L]] <- sp
+
+    ks <- kept_s[seq_len(n_kept)]
+    ke <- kept_e[seq_len(n_kept)]
+    pos <- findInterval(s_i, ks)
+
+    if (pos >= 1L && ke[pos] >= s_i) next
+    if (pos < n_kept && ks[pos + 1L] <= e_i) next
+
+    # Insert in sorted position (pos + 1)
+    n_kept <- n_kept + 1L
+    if (pos == n_kept - 1L) {
+      kept_idx[n_kept] <- i
+      kept_s[n_kept] <- s_i
+      kept_e[n_kept] <- e_i
+    } else {
+      shift_from <- (pos + 1L):(n_kept - 1L)
+      shift_to <- (pos + 2L):n_kept
+      kept_idx[shift_to] <- kept_idx[shift_from]
+      kept_s[shift_to] <- kept_s[shift_from]
+      kept_e[shift_to] <- kept_e[shift_from]
+      kept_idx[pos + 1L] <- i
+      kept_s[pos + 1L] <- s_i
+      kept_e[pos + 1L] <- e_i
     }
+    if (e_i > max_end) max_end <- e_i
   }
 
-  # Sort final non-overlapping spans by ascending start offset
-  kept_st <- vapply(kept, `[[`, integer(1L), "start")
-  kept[order(kept_st)]
+  spans[kept_idx[seq_len(n_kept)]]
 }
 
-#' Detect PII spans within a single character string
+#' Detect PII spans within a single character string (Unicode-canonicalized & ReDoS-safe)
 #' @noRd
 detect_pii_single <- function(text, config, stopwords) {
   if (is.na(text) || !nzchar(text)) return(list())
+
+  canon <- canonicalize_pii_text(text)
+  scan_text <- canon$canonical
+  if (is.na(scan_text) || !nzchar(scan_text)) return(list())
 
   spans <- list()
   add_spans <- function(x) {
@@ -310,7 +359,7 @@ detect_pii_single <- function(text, config, stopwords) {
   # Priority 1: Custom regex patterns
   if (!is.null(config$custom_patterns) && length(config$custom_patterns) > 0L) {
     for (nm in names(config$custom_patterns)) {
-      add_spans(match_spans_regex(text, config$custom_patterns[[nm]], nm, priority = 10L))
+      add_spans(match_spans_regex(scan_text, config$custom_patterns[[nm]], nm, priority = 10L))
     }
   }
 
@@ -324,17 +373,17 @@ detect_pii_single <- function(text, config, stopwords) {
       esc <- vapply(terms, escape_regex, character(1L))
       prefix <- if (isTRUE(config$case_sensitive_dictionary)) "" else "(?i)"
       pat <- paste0(prefix, "(?<![A-Za-z0-9_])(?:", paste(esc, collapse = "|"), ")(?![A-Za-z0-9_])")
-      add_spans(match_spans_regex(text, pat, nm, priority = 15L))
+      add_spans(match_spans_regex(scan_text, pat, nm, priority = 15L))
     }
   }
 
   ents <- config$entities
 
-  # Priority 20: Email
+  # Priority 20: Email (ReDoS-safe RFC-bounded quantifiers; handles sentence-ending periods)
   if ("email" %in% ents) {
     add_spans(match_spans_regex(
-      text,
-      "(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}(?![A-Za-z0-9._%+-])",
+      scan_text,
+      "(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?){0,6}\\.[A-Za-z]{2,24}(?![A-Za-z0-9_%+-]|\\.[A-Za-z0-9])",
       "email",
       priority = 20L
     ))
@@ -343,75 +392,103 @@ detect_pii_single <- function(text, config, stopwords) {
   # Priority 25: SSN
   if ("ssn" %in% ents) {
     add_spans(match_spans_regex(
-      text,
-      "(?i)\\b(?:SSN|Social\\s+Security(?:\\s+(?:No\\.?|Number|#))?)\\s*[:#-]?\\s*((?!000|666|9\\d{2})\\d{3}[- ]?(?!00)\\d{2}[- ]?(?!0000)\\d{4})\\b",
+      scan_text,
+      "(?i)\\b(?:SSN|Social\\s+Security(?:\\s+(?:No\\.?|Number|#))?)\\s{0,4}[:#-]?\\s{0,4}((?!000|666|9\\d{2})\\d{3}[- ]?(?!00)\\d{2}[- ]?(?!0000)\\d{4})\\b",
       "ssn",
       priority = 24L,
       capture_group = 1L
     ))
     add_spans(match_spans_regex(
-      text,
+      scan_text,
       "(?<!\\d)(?!000|666|9\\d{2})\\d{3}[- ](?!00)\\d{2}[- ](?!0000)\\d{4}(?!\\d)",
       "ssn",
       priority = 25L
     ))
   }
 
-  # Priority 30: Street addresses & PO Boxes (higher than person_name so "Dr." street isn't misparsed as Doctor)
+  # Priority 30: Street addresses & PO Boxes (ReDoS-safe bounded city/street tokens)
   if ("street_address" %in% ents) {
     street_pat <- paste0(
-      "\\b\\d{1,6}\\s+(?:[NSEW]\\.?\\s+)?(?:[A-Za-z0-9.'-]+\\s+){1,4}",
+      "\\b\\d{1,6}\\s{1,3}(?:[NSEW]\\.?\\s{1,2})?(?:[A-Za-z0-9.'-]{1,25}\\s{1,2}){1,4}",
       "(?i:Street|St\\.?|Avenue|Ave\\.?|Road|Rd\\.?|Boulevard|Blvd\\.?|Drive|Dr\\.?|",
       "Lane|Ln\\.?|Court|Ct\\.?|Way|Place|Pl\\.?|Circle|Cir\\.?|Terrace|Ter\\.?|",
       "Parkway|Pkwy\\.?|Highway|Hwy\\.?|Trail|Trl\\.?)",
-      "(?:(?:\\s*,\\s*|\\s+)(?i:Apt\\.?|Apartment|Suite|Ste\\.?|Unit|#)\\s*[A-Za-z0-9-]+)?",
-      "(?:\\s*,\\s*[A-Z][a-zA-Z. ]+,\\s*[A-Z]{2}\\s+\\d{5}(?:-\\d{4})?)?",
+      "(?:(?:,\\s{0,2}|\\s{1,2})(?i:Apt\\.?|Apartment|Suite|Ste\\.?|Unit|#)\\s{0,2}[A-Za-z0-9-]{1,12})?",
+      "(?:,\\s{0,2}[A-Z][a-zA-Z.-]{1,24}(?:\\s[A-Za-z.-]{1,24}){0,2},\\s{0,2}[A-Z]{2}\\s{1,2}\\d{5}(?:-\\d{4})?)?",
       "(?![A-Za-z0-9])"
     )
-    add_spans(match_spans_regex(text, street_pat, "street_address", priority = 30L))
-    add_spans(match_spans_regex(text, "(?i)\\bP\\.?\\s*O\\.?\\s*Box\\s+\\d+\\b", "street_address", priority = 30L))
+    add_spans(match_spans_regex(scan_text, street_pat, "street_address", priority = 30L))
+    add_spans(match_spans_regex(scan_text, "(?i)\\bP\\.?\\s{0,2}O\\.?\\s{1,2}Box\\s{1,2}\\d{1,8}\\b", "street_address", priority = 30L))
+  }
+
+  # Priority 33: HIPAA Safe Harbor US ZIP codes & restricted 3-digit prefixes
+  if ("zip_code" %in% ents) {
+    restricted_z3 <- hipaa_restricted_zip3()
+    # 1. Explicit ZIP / postal label (5-digit, ZIP+4, or restricted 3-digit prefix)
+    zip_labeled_pat <- "(?i)\\b(?:zip(?:\\s{1,2}(?:code|prefix))?|postal\\s{1,2}code)\\s{0,3}[:#=-]?\\s{0,3}(\\d{5}(?:-\\d{4})?|\\d{3}(?:xx|\\*\\*|00)?)\\b"
+    add_spans(match_spans_regex(
+      scan_text,
+      zip_labeled_pat,
+      "zip_code",
+      priority = 33L,
+      capture_group = 1L,
+      filter_fn = function(val, ...) {
+        if (grepl("^\\d{5}(?:-\\d{4})?$", val, perl = TRUE)) return(TRUE)
+        substr(val, 1L, 3L) %in% restricted_z3
+      }
+    ))
+    # 2. US 2-letter State code followed by 5-digit ZIP or ZIP+4 (e.g., "Hartford, CT 06103")
+    st_alt <- paste(us_state_codes(), collapse = "|")
+    zip_state_pat <- paste0("\\b(?:", st_alt, ")\\s{1,2}(\\d{5}(?:-\\d{4})?)\\b")
+    add_spans(match_spans_regex(
+      scan_text,
+      zip_state_pat,
+      "zip_code",
+      priority = 33L,
+      capture_group = 1L
+    ))
   }
 
   # Priority 35: MRN / Patient / Student IDs
   if ("mrn_id" %in% ents) {
     mrn_labeled <- paste0(
-      "(?i)\\b(?:MRN|Med(?:ical)?\\s*Rec(?:ord)?(?:\\s*(?:No\\.?|Number|#))?|",
-      "Patient\\s*ID|Pt\\.?\\s*ID|Subject\\s*ID|Participant\\s*ID|",
-      "Student\\s*ID|SID|UID|Chart\\s*(?:No\\.?|#))",
-      "\\s*[:#-]?\\s*[A-Za-z0-9][A-Za-z0-9-]{2,19}\\b"
+      "(?i)\\b(?:MRN|Med(?:ical)?\\s{1,2}Rec(?:ord)?(?:\\s{1,2}(?:No\\.?|Number|#))?|",
+      "Patient\\s{1,2}ID|Pt\\.?\\s{1,2}ID|Subject\\s{1,2}ID|Participant\\s{1,2}ID|",
+      "Student\\s{1,2}ID|SID|UID|Chart\\s{1,2}(?:No\\.?|#))",
+      "\\s{0,3}[:#-]?\\s{0,3}[A-Za-z0-9][A-Za-z0-9-]{2,19}\\b"
     )
-    add_spans(match_spans_regex(text, mrn_labeled, "mrn_id", priority = 34L))
-    add_spans(match_spans_regex(text, "\\b(?:MRN|PID|SID|STU|PAT)[-_]?\\d{4,12}\\b", "mrn_id", priority = 35L))
+    add_spans(match_spans_regex(scan_text, mrn_labeled, "mrn_id", priority = 34L))
+    add_spans(match_spans_regex(scan_text, "\\b(?:MRN|PID|SID|STU|PAT)[-_]?\\d{4,12}\\b", "mrn_id", priority = 35L))
   }
 
-  # Priority 40: IP addresses (IPv4 & IPv6)
+  # Priority 40: IP addresses (IPv4 & ReDoS-safe IPv6)
   if ("ip_address" %in% ents) {
     ipv4_pat <- "(?<![\\d.])(?:(?:25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]?\\d)(?![\\d.])"
-    add_spans(match_spans_regex(text, ipv4_pat, "ip_address", priority = 40L))
+    add_spans(match_spans_regex(scan_text, ipv4_pat, "ip_address", priority = 40L))
 
-    ipv6_pat <- paste0(
-      "(?i)(?<![0-9a-f:])(?:",
-      "(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|",
-      "(?:[0-9a-f]{1,4}:){1,7}:|",
-      ":(?::[0-9a-f]{1,4}){1,7}|",
-      "(?:[0-9a-f]{1,4}:){1,6}:[0-9a-f]{1,4}|",
-      "(?:[0-9a-f]{1,4}:){1,5}(?::[0-9a-f]{1,4}){1,2}|",
-      "(?:[0-9a-f]{1,4}:){1,4}(?::[0-9a-f]{1,4}){1,3}|",
-      "(?:[0-9a-f]{1,4}:){1,3}(?::[0-9a-f]{1,4}){1,4}|",
-      "(?:[0-9a-f]{1,4}:){1,2}(?::[0-9a-f]{1,4}){1,5}|",
-      "[0-9a-f]{1,4}:(?::[0-9a-f]{1,4}){1,6}",
-      ")(?![0-9a-f:])"
-    )
+    # Linear-time IPv6 token scan validated structurally in R (eliminates alternation backtracking)
+    ipv6_cand_pat <- "(?i)(?<![0-9a-f:])[0-9a-f:]{3,39}(?![0-9a-f:])"
     add_spans(match_spans_regex(
-      text,
-      ipv6_pat,
+      scan_text,
+      ipv6_cand_pat,
       "ip_address",
       priority = 40L,
-      filter_fn = function(val, ...) grepl(":", val, fixed = TRUE) && grepl("[0-9a-fA-F]", val)
+      filter_fn = function(val, ...) {
+        if (!grepl("[0-9a-fA-F]", val) || lengths(regmatches(val, gregexpr(":", val, fixed = TRUE))) < 2L) {
+          return(FALSE)
+        }
+        if (grepl(":::", val, fixed = TRUE)) return(FALSE)
+        dbl <- lengths(regmatches(val, gregexpr("::", val, fixed = TRUE)))
+        if (dbl > 1L) return(FALSE)
+        parts <- strsplit(val, ":", fixed = TRUE)[[1L]]
+        non_empty <- parts[nzchar(parts)]
+        if (length(non_empty) == 0L || any(!grepl("^[0-9a-fA-F]{1,4}$", non_empty))) return(FALSE)
+        if (dbl == 0L) length(parts) == 8L else length(non_empty) <= 7L
+      }
     ))
   }
 
-  # Priority 45: Phone numbers (US and international)
+  # Priority 45: Phone numbers (US and ReDoS-safe international)
   if ("phone" %in% ents) {
     us_phone <- paste0(
       "(?<!\\d)(?:",
@@ -420,18 +497,19 @@ detect_pii_single <- function(text, config, stopwords) {
       "1[-.\\s][2-9]\\d{2}[-.\\s]\\d{3}[-.\\s]\\d{4}|",
       "\\([2-9]\\d{2}\\)[-.\\s]?\\d{3}[-.\\s]?\\d{4}|",
       "[2-9]\\d{2}[-.\\s]\\d{3}[-.\\s]\\d{4}",
-      ")(?:\\s*(?i:ext\\.?|x)\\s*\\d{1,5})?(?!\\d)"
+      ")(?:\\s{0,2}(?i:ext\\.?|x)\\s{0,2}\\d{1,5})?(?!\\d)"
     )
-    add_spans(match_spans_regex(text, us_phone, "phone", priority = 45L))
+    add_spans(match_spans_regex(scan_text, us_phone, "phone", priority = 45L))
 
-    intl_phone <- "(?<!\\d)\\+[1-9]\\d{0,2}(?:[-.\\s]?\\(?\\d{1,4}\\)?){2,5}(?:\\s*(?i:ext\\.?|x)\\s*\\d{1,5})?(?!\\d)"
+    # Require explicit non-optional delimiter between groups to eliminate backtracking on long digit strings
+    intl_phone <- "(?<!\\d)\\+[1-9]\\d{0,2}(?:[-.\\s]\\(?\\d{1,4}\\)?){2,5}(?:\\s{0,2}(?i:ext\\.?|x)\\s{0,2}\\d{1,5})?(?!\\d)"
     add_spans(match_spans_regex(
-      text,
+      scan_text,
       intl_phone,
       "phone",
       priority = 46L,
       filter_fn = function(val, ...) {
-        main_part <- sub("\\s*(?i:ext\\.?|x).*$", "", val, perl = TRUE)
+        main_part <- sub("\\s{0,2}(?i:ext\\.?|x).*$", "", val, perl = TRUE)
         digits <- gsub("[^0-9]", "", main_part)
         nchar(digits) >= 7L && nchar(digits) <= 15L
       }
@@ -442,56 +520,74 @@ detect_pii_single <- function(text, config, stopwords) {
   if ("date" %in% ents) {
     month_pat <- "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
     dob_pat <- paste0(
-      "(?i)\\b(?:DOB|D\\.O\\.B\\.|Date\\s+of\\s+Birth|Birthdate)\\s*[:#-]?\\s*(?:",
+      "(?i)\\b(?:DOB|D\\.O\\.B\\.|Date\\s{1,2}of\\s{1,2}Birth|Birthdate)\\s{0,3}[:#-]?\\s{0,3}(?:",
       "(?:19|20)\\d{2}[-/.]\\d{1,2}[-/.]\\d{1,2}|",
       "\\d{1,2}[-/.]\\d{1,2}[-/.](?:19|20)?\\d{2}|",
-      month_pat, "\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+(?:19|20)\\d{2}",
+      month_pat, "\\.?\\s{1,2}\\d{1,2}(?:st|nd|rd|th)?,?\\s{1,2}(?:19|20)\\d{2}",
       ")\\b"
     )
-    add_spans(match_spans_regex(text, dob_pat, "date", priority = 49L))
+    add_spans(match_spans_regex(scan_text, dob_pat, "date", priority = 49L))
     add_spans(match_spans_regex(
-      text,
+      scan_text,
       "(?<!\\d)(?:19|20)\\d{2}[-/](?:0?[1-9]|1[0-2])[-/](?:0?[1-9]|[12]\\d|3[01])(?!\\d)",
       "date",
       priority = 50L
     ))
     add_spans(match_spans_regex(
-      text,
+      scan_text,
       "(?<!\\d)(?:0?[1-9]|1[0-2])[/-](?:0?[1-9]|[12]\\d|3[01])[/-](?:(?:19|20)\\d{2}|\\d{2})(?!\\d)",
       "date",
       priority = 50L
     ))
     add_spans(match_spans_regex(
-      text,
+      scan_text,
       "(?<!\\d)(?:1[3-9]|2\\d|3[01])[/-](?:0?[1-9]|1[0-2])[/-](?:(?:19|20)\\d{2}|\\d{2})(?!\\d)",
       "date",
       priority = 50L
     ))
     add_spans(match_spans_regex(
-      text,
-      paste0("(?i)\\b", month_pat, "\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+(?:19|20)\\d{2}\\b"),
+      scan_text,
+      paste0("(?i)\\b", month_pat, "\\.?\\s{1,2}\\d{1,2}(?:st|nd|rd|th)?,?\\s{1,2}(?:19|20)\\d{2}\\b"),
       "date",
       priority = 50L
     ))
     add_spans(match_spans_regex(
-      text,
-      paste0("(?i)\\b\\d{1,2}(?:st|nd|rd|th)?\\s+", month_pat, "\\.?,?\\s+(?:19|20)\\d{2}\\b"),
+      scan_text,
+      paste0("(?i)\\b\\d{1,2}(?:st|nd|rd|th)?\\s{1,2}", month_pat, "\\.?,?\\s{1,2}(?:19|20)\\d{2}\\b"),
       "date",
       priority = 50L
     ))
   }
 
-  # Priority 60: Person names (titled, role-labeled, and optional unlabeled heuristic)
+  # Priority 52: HIPAA Safe Harbor Ages > 89 (45 CFR 164.514(b)(2)(i)(C))
+  if ("age_over_89" %in% ents) {
+    age_suffix_pat <- "(?i)\\b(9\\d|1[0-2]\\d)(?:-|\\s{1,2})(?:years?(?:-|\\s{1,2})old|y/?o\\b|y\\.o\\.|yo\\b)"
+    add_spans(match_spans_regex(
+      scan_text,
+      age_suffix_pat,
+      "age_over_89",
+      priority = 52L
+    ))
+    age_prefix_pat <- "(?i)\\b(?:age[ds]?|patient\\s{1,2}is|client\\s{1,2}is|subject\\s{1,2}is|female\\s{1,2}aged|male\\s{1,2}aged)\\s{0,2}(?:[:=#-]|\\bof\\b)?\\s{0,2}(9\\d|1[0-2]\\d)(?!\\s*(?:%|mg|ml|mmhg|bpm|lbs?|kg|cm|in|f\\b|c\\b))\\b"
+    add_spans(match_spans_regex(
+      scan_text,
+      age_prefix_pat,
+      "age_over_89",
+      priority = 52L,
+      capture_group = 1L
+    ))
+  }
+
+  # Priority 60: Person names (ReDoS-safe bounded titled, role-labeled, and optional unlabeled heuristic)
   if ("person_name" %in% ents) {
     # 1. Titled names (Dr., Mr., Mrs., Ms., Prof., etc.)
-    titled_pat <- "\\b(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor|Rev|Hon)\\.?\\s+[A-Z][a-zA-Z'-]+(?:\\s+[A-Z]\\.)?(?:\\s+[A-Z][a-zA-Z'-]+){0,2}\\b"
+    titled_pat <- "\\b(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor|Rev|Hon)\\.?\\s{1,2}[A-Z][a-zA-Z'-]{1,25}(?:\\s{1,2}[A-Z]\\.)?(?:\\s{1,2}[A-Z][a-zA-Z'-]{1,25}){0,2}\\b"
     add_spans(match_spans_regex(
-      text,
+      scan_text,
       titled_pat,
       "person_name",
       priority = 58L,
       filter_fn = function(val, ...) {
-        # Ensure at least the first name token after title isn't a stopword
         toks <- strsplit(trimws(val), "\\s+")[[1L]]
         if (length(toks) < 2L) return(FALSE)
         name_toks <- tolower(gsub("[^A-Za-z]", "", toks[-1L]))
@@ -500,9 +596,9 @@ detect_pii_single <- function(text, config, stopwords) {
     ))
 
     # 2. Role-cued names ("Patient: Jane Doe", "Student: Marcus Harris")
-    role_pat <- "\\b(?:Patient|Client|Student|Participant|Subject|Clinician|Therapist|Physician|Doctor|Parent|Guardian|Name)\\s*:\\s*([A-Z][a-zA-Z'-]+(?:\\s+[A-Z]\\.)?(?:\\s+[A-Z][a-zA-Z'-]+){0,2})\\b"
+    role_pat <- "\\b(?:Patient|Client|Student|Participant|Subject|Clinician|Therapist|Physician|Doctor|Parent|Guardian|Name)\\s{0,2}:\\s{0,2}([A-Z][a-zA-Z'-]{1,25}(?:\\s{1,2}[A-Z]\\.)?(?:\\s{1,2}[A-Z][a-zA-Z'-]{1,25}){0,2})\\b"
     add_spans(match_spans_regex(
-      text,
+      scan_text,
       role_pat,
       "person_name",
       priority = 59L,
@@ -517,17 +613,16 @@ detect_pii_single <- function(text, config, stopwords) {
     if (isTRUE(config$detect_unlabeled_names)) {
       unlabeled_pat <- paste0(
         "\\b[A-Z][a-z]{1,20}(?:-[A-Z][a-z]{1,20})?",
-        "(?:\\s+[A-Z]\\.)?",
-        "\\s+[A-Z](?:[a-z]{1,20}|'[A-Z][a-z]{1,20}|c[A-Z][a-z]{1,20})(?:-[A-Z][a-z]{1,20})?\\b"
+        "(?:\\s{1,2}[A-Z]\\.)?",
+        "\\s{1,2}[A-Z](?:[a-z]{1,20}|'[A-Z][a-z]{1,20}|c[A-Z][a-z]{1,20})(?:-[A-Z][a-z]{1,20})?\\b"
       )
       add_spans(match_spans_regex(
-        text,
+        scan_text,
         unlabeled_pat,
         "person_name",
         priority = 62L,
         filter_fn = function(val, ...) {
           toks <- strsplit(trimws(val), "\\s+")[[1L]]
-          # Strip middle initial like "A."
           non_init <- toks[!grepl("^[A-Z]\\.$", toks)]
           if (length(non_init) < 2L) return(FALSE)
           clean_toks <- tolower(gsub("[^A-Za-z]", "", non_init))
@@ -537,10 +632,27 @@ detect_pii_single <- function(text, config, stopwords) {
     }
   }
 
-  # Apply allowlist filtering (case-insensitive exact match)
+  # Map canonical offsets back to exact character indices in original text
+  if (length(spans) > 0L) {
+    orig_idx <- canon$orig_idx
+    spans <- lapply(spans, function(sp) {
+      o_start <- orig_idx[sp$start]
+      o_end <- orig_idx[sp$end]
+      sp$canonical_match <- sp$match
+      sp$start <- o_start
+      sp$end <- o_end
+      sp$length <- as.integer(o_end - o_start + 1L)
+      sp$match <- substr(text, o_start, o_end)
+      sp
+    })
+  }
+
+  # Apply allowlist filtering (case-insensitive exact match on original or canonical match)
   if (!is.null(config$allowlist) && length(config$allowlist) > 0L && length(spans) > 0L) {
     allow_lc <- tolower(trimws(config$allowlist))
-    spans <- Filter(function(sp) !(tolower(trimws(sp$match)) %in% allow_lc), spans)
+    spans <- Filter(function(sp) {
+      !(tolower(trimws(sp$match)) %in% allow_lc || tolower(trimws(sp$canonical_match)) %in% allow_lc)
+    }, spans)
   }
 
   resolve_overlapping_spans(spans)
@@ -620,18 +732,24 @@ pii_detect <- function(text, config = pii_config(), include_values = TRUE) {
   )
 }
 
-#' Replace detected spans inside a single string from right to left
+#' Replace detected non-overlapping sorted spans in O(N + M) linear time
 #' @noRd
 apply_span_replacements <- function(text, spans, repl_vec) {
-  if (length(spans) == 0L) return(text)
-  out <- text
-  for (i in rev(seq_along(spans))) {
-    sp <- spans[[i]]
-    left <- if (sp$start > 1L) substr(out, 1L, sp$start - 1L) else ""
-    right <- if (sp$end < nchar(out)) substr(out, sp$end + 1L, nchar(out)) else ""
-    out <- paste0(left, repl_vec[i], right)
-  }
-  out
+  m <- length(spans)
+  if (m == 0L) return(text)
+  n_chr <- nchar(text, type = "chars")
+  starts <- vapply(spans, `[[`, integer(1L), "start")
+  ends <- vapply(spans, `[[`, integer(1L), "end")
+
+  # Slice all untouched text segments in one vectorized C call, interleave replacements, collapse once
+  gap_starts <- c(1L, ends + 1L)
+  gap_ends <- c(starts - 1L, n_chr)
+  gaps <- ifelse(gap_starts <= gap_ends, substring(text, gap_starts, gap_ends), "")
+
+  pieces <- character(2L * m + 1L)
+  pieces[seq.int(1L, 2L * m + 1L, by = 2L)] <- gaps
+  pieces[seq.int(2L, 2L * m, by = 2L)] <- repl_vec
+  paste(pieces, collapse = "")
 }
 
 #' Build an aggregate-only airgap_privacy_report from per-document span lists
@@ -858,22 +976,63 @@ print.airgap_pii_vault <- function(x, ...) {
   invisible(x)
 }
 
-#' Derive separate encryption and MAC keys from a master secret key
+#' Derive domain-separated pseudonym, encryption, and MAC keys via RFC 5869 HKDF-SHA256
 #' @noRd
-derive_vault_subkeys <- function(key) {
+derive_vault_subkeys <- function(key, salt = NULL) {
   master <- normalize_secret_key(key)
-  enc_key <- as.raw(openssl::sha256(c(master, charToRaw("|airgapllm-vault-enc-v1"))))
-  mac_key <- as.raw(openssl::sha256(c(master, charToRaw("|airgapllm-vault-mac-v1"))))
-  fp <- substr(hash_to_hex(openssl::sha256(master)), 1L, 16L)
-  list(master = master, enc_key = enc_key, mac_key = mac_key, fingerprint = fp)
+  pseudonym_key <- hkdf_sha256(
+    ikm = master,
+    salt = "airgapllm-v2-pseudonym-salt",
+    info = "airgapllm:pseudonym:hmac-sha256",
+    length = 32L
+  )
+  fp <- substr(hash_to_hex(hkdf_sha256(
+    ikm = master,
+    salt = "airgapllm-v2-fingerprint-salt",
+    info = "airgapllm:vault:key-fingerprint",
+    length = 32L
+  )), 1L, 16L)
+
+  enc_key <- NULL
+  mac_key <- NULL
+  if (!is.null(salt)) {
+    enc_key <- hkdf_sha256(
+      ikm = master,
+      salt = salt,
+      info = "airgapllm:vault:aes-256-cbc:v2",
+      length = 32L
+    )
+    mac_key <- hkdf_sha256(
+      ikm = master,
+      salt = salt,
+      info = "airgapllm:vault:hmac-sha256:v2",
+      length = 32L
+    )
+  }
+
+  list(
+    master = master,
+    pseudonym_key = pseudonym_key,
+    enc_key = enc_key,
+    mac_key = mac_key,
+    fingerprint = fp
+  )
+}
+
+#' Compute Associated Data (AAD) bytes bound into v2 vault HMAC-SHA256 tag
+#' @noRd
+vault_v2_aad <- function(format, cipher, vault_id, key_fingerprint) {
+  charToRaw(enc2utf8(paste(format, cipher, vault_id, key_fingerprint, sep = "|")))
 }
 
 #' Save a PII Pseudonymization Vault to a Separate Local File
 #'
 #' Persists an `airgap_pii_vault` to disk separately from model prompts and
-#' audit logs. When `encrypt = TRUE` (the default), serializes the vault with
-#' AES-256-CBC encryption and Encrypt-then-MAC HMAC-SHA256 authentication, and
-#' restricts file permissions to owner-only (`0600`).
+#' audit logs. When `encrypt = TRUE` (the default), derives fresh independent
+#' encryption and authentication keys via RFC 5869 HKDF-SHA256 using a per-save
+#' random salt and fresh 128-bit IV, encrypts with AES-256-CBC, authenticates
+#' envelope metadata + salt + IV + ciphertext via Encrypt-then-MAC HMAC-SHA256,
+#' and enforces owner-only (`0600`) file permissions.
 #'
 #' @param vault An `airgap_pii_vault` object (e.g., from
 #'   `pii_pseudonymize()$vault`).
@@ -896,6 +1055,7 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
     cli::cli_abort("{.arg vault} must be an `airgap_pii_vault` object.", class = "airgap_validation_error")
   }
   assert_scalar_string(path, "path")
+  assert_no_control_chars(path, "path")
   assert_scalar_logical(encrypt, "encrypt")
 
   payload_json <- canonical_json(list(
@@ -909,8 +1069,9 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
     if (is.null(key)) {
       cli::cli_abort("{.arg key} is required to save an encrypted PII vault.", class = "airgap_key_error")
     }
-    subkeys <- derive_vault_subkeys(key)
-    if (!identical(subkeys$fingerprint, vault$key_fingerprint)) {
+    hkdf_salt <- openssl::rand_bytes(16L)
+    subkeys <- derive_vault_subkeys(key, salt = hkdf_salt)
+    if (!constant_time_equal(subkeys$fingerprint, vault$key_fingerprint)) {
       cli::cli_abort(
         "Provided {.arg key} fingerprint does not match the vault's key fingerprint.",
         class = "airgap_key_error"
@@ -918,14 +1079,18 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
     }
     iv <- openssl::rand_bytes(16L)
     ct <- openssl::aes_cbc_encrypt(charToRaw(enc2utf8(payload_json)), key = subkeys$enc_key, iv = iv)
-    mac <- hash_to_hex(openssl::sha256(c(iv, ct), key = subkeys$mac_key))
+    fmt <- "airgapllm_vault_v2"
+    ciph <- "aes-256-cbc-hkdf-hmac-sha256"
+    aad <- vault_v2_aad(fmt, ciph, vault$vault_id, vault$key_fingerprint)
+    mac <- hash_to_hex(openssl::sha256(c(aad, hkdf_salt, iv, ct), key = subkeys$mac_key))
 
     envelope <- list(
-      format = "airgapllm_vault_v1",
+      format = fmt,
       encrypted = TRUE,
-      cipher = "aes-256-cbc-hmac-sha256",
+      cipher = ciph,
       vault_id = vault$vault_id,
       key_fingerprint = vault$key_fingerprint,
+      salt_b64 = openssl::base64_encode(hkdf_salt),
       iv_b64 = openssl::base64_encode(iv),
       ciphertext_b64 = openssl::base64_encode(ct),
       mac_hex = mac
@@ -933,7 +1098,7 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
     out_text <- jsonlite::toJSON(envelope, auto_unbox = TRUE, pretty = TRUE)
   } else {
     envelope <- list(
-      format = "airgapllm_vault_v1",
+      format = "airgapllm_vault_v2",
       encrypted = FALSE,
       vault_id = vault$vault_id,
       key_fingerprint = vault$key_fingerprint,
@@ -956,7 +1121,8 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
 #'
 #' Reads and (if encrypted) authenticates and decrypts an `airgap_pii_vault`
 #' file written by [pii_vault_save()]. Verifies the HMAC-SHA256 authentication
-#' tag prior to decryption to reject wrong keys or tampered vault files.
+#' tag in constant time BEFORE decryption to defeat padding-oracle and timing
+#' attacks while never exposing plaintext or key material in error messages.
 #'
 #' @param path Character scalar path to the vault file.
 #' @param key Secret key (required when the vault file is encrypted).
@@ -966,16 +1132,18 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
 #' @export
 pii_vault_load <- function(path, key = NULL) {
   assert_scalar_string(path, "path")
+  assert_no_control_chars(path, "path")
   if (!file.exists(path)) {
     cli::cli_abort("Vault file not found: {.path {path}}.", class = "airgap_vault_error")
   }
   env <- tryCatch(
     jsonlite::fromJSON(path, simplifyVector = FALSE),
     error = function(e) {
-      cli::cli_abort("Failed to parse vault JSON: {conditionMessage(e)}", class = "airgap_vault_error")
+      cli::cli_abort("Failed to parse vault JSON.", class = "airgap_vault_error")
     }
   )
-  if (!identical(env$format, "airgapllm_vault_v1")) {
+  fmt <- env$format
+  if (!is.character(fmt) || length(fmt) != 1L || !fmt %in% c("airgapllm_vault_v2", "airgapllm_vault_v1")) {
     cli::cli_abort("Unsupported or invalid vault file format.", class = "airgap_vault_error")
   }
 
@@ -983,23 +1151,57 @@ pii_vault_load <- function(path, key = NULL) {
     if (is.null(key)) {
       cli::cli_abort("{.arg key} is required to decrypt this PII vault.", class = "airgap_key_error")
     }
-    subkeys <- derive_vault_subkeys(key)
-    iv <- openssl::base64_decode(env$iv_b64)
-    ct <- openssl::base64_decode(env$ciphertext_b64)
-    expected_mac <- hash_to_hex(openssl::sha256(c(iv, ct), key = subkeys$mac_key))
-    if (!identical(tolower(expected_mac), tolower(env$mac_hex))) {
+
+    # Uniform failure message prevents padding-oracle or field-tamper distinction
+    fail_auth <- function() {
       cli::cli_abort(
-        "Vault authentication failed: invalid key or tampered vault ciphertext.",
+        "Vault authentication failed: invalid key or tampered vault.",
         class = "airgap_vault_error"
       )
     }
-    pt_raw <- tryCatch(
-      openssl::aes_cbc_decrypt(ct, key = subkeys$enc_key, iv = iv),
-      error = function(e) {
-        cli::cli_abort("Vault decryption failed: {conditionMessage(e)}", class = "airgap_vault_error")
+
+    if (!is.character(env$iv_b64) || !is.character(env$ciphertext_b64) || !is.character(env$mac_hex)) {
+      fail_auth()
+    }
+
+    iv <- tryCatch(openssl::base64_decode(env$iv_b64), error = function(e) raw(0L))
+    ct <- tryCatch(openssl::base64_decode(env$ciphertext_b64), error = function(e) raw(0L))
+    if (length(iv) != 16L || length(ct) == 0L || (length(ct) %% 16L) != 0L) {
+      fail_auth()
+    }
+
+    if (identical(fmt, "airgapllm_vault_v2")) {
+      if (!is.character(env$salt_b64) || !identical(env$cipher, "aes-256-cbc-hkdf-hmac-sha256") ||
+          !is.character(env$vault_id) || !is.character(env$key_fingerprint)) {
+        fail_auth()
       }
+      hkdf_salt <- tryCatch(openssl::base64_decode(env$salt_b64), error = function(e) raw(0L))
+      if (length(hkdf_salt) < 16L) fail_auth()
+      subkeys <- derive_vault_subkeys(key, salt = hkdf_salt)
+      aad <- vault_v2_aad(fmt, env$cipher, env$vault_id, env$key_fingerprint)
+      expected_mac <- hash_to_hex(openssl::sha256(c(aad, hkdf_salt, iv, ct), key = subkeys$mac_key))
+      enc_key <- subkeys$enc_key
+    } else {
+      # Legacy v1 envelope compatibility (still verified in constant time before decryption)
+      master <- normalize_secret_key(key)
+      enc_key <- as.raw(openssl::sha256(c(master, charToRaw("|airgapllm-vault-enc-v1"))))
+      mac_key <- as.raw(openssl::sha256(c(master, charToRaw("|airgapllm-vault-mac-v1"))))
+      expected_mac <- hash_to_hex(openssl::sha256(c(iv, ct), key = mac_key))
+    }
+
+    # STRICT constant-time MAC check BEFORE touching AES-CBC decryption
+    if (!constant_time_equal(tolower(expected_mac), tolower(env$mac_hex))) {
+      fail_auth()
+    }
+
+    pt_raw <- tryCatch(
+      openssl::aes_cbc_decrypt(ct, key = enc_key, iv = iv),
+      error = function(e) fail_auth()
     )
-    inner <- jsonlite::fromJSON(rawToChar(pt_raw), simplifyVector = FALSE)
+    inner <- tryCatch(
+      jsonlite::fromJSON(rawToChar(pt_raw), simplifyVector = FALSE),
+      error = function(e) fail_auth()
+    )
     return(structure(
       list(
         vault_id = inner$vault_id,
@@ -1085,7 +1287,7 @@ pii_pseudonymize <- function(
     if (!inherits(vault, "airgap_pii_vault")) {
       cli::cli_abort("{.arg vault} must be an `airgap_pii_vault` object.", class = "airgap_validation_error")
     }
-    if (!identical(vault$key_fingerprint, subkeys$fingerprint)) {
+    if (!constant_time_equal(vault$key_fingerprint, subkeys$fingerprint)) {
       cli::cli_abort(
         "Key fingerprint mismatch: cannot mix keys within the same pseudonymization vault.",
         class = "airgap_key_error"
@@ -1110,7 +1312,7 @@ pii_pseudonymize <- function(
       for (j in seq_along(spans)) {
         sp <- spans[[j]]
         mac_input <- paste0(sp$entity_type, "\x1f", sp$match)
-        digest_hex <- hmac_sha256_hex(mac_input, subkeys$master)
+        digest_hex <- hmac_sha256_hex(mac_input, subkeys$pseudonym_key)
         tok <- paste0("<<", toupper(sp$entity_type), "_", substr(digest_hex, 1L, token_length), ">>")
         if (is.null(mappings[[tok]])) {
           mappings[[tok]] <- list(entity_type = sp$entity_type, value = sp$match)

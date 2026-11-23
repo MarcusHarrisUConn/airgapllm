@@ -17,5 +17,6 @@ An \code{airgap_pii_vault} object.
 \description{
 Reads and (if encrypted) authenticates and decrypts an \code{airgap_pii_vault}
 file written by \code{\link[=pii_vault_save]{pii_vault_save()}}. Verifies the HMAC-SHA256 authentication
-tag prior to decryption to reject wrong keys or tampered vault files.
+tag in constant time BEFORE decryption to defeat padding-oracle and timing
+attacks while never exposing plaintext or key material in error messages.
 }

@@ -1,0 +1,205 @@
+# airgapllm
+
+> **Verifiably offline, containerized local LLM workflows with PII
+> redaction, schema-enforced batch extraction, and IRB/HIPAA audit
+> trails in R.**
+
+`airgapllm` is a turnkey, privacy-first R workbench enabling clinical,
+behavioral, educational, and medical researchers to run open-weights
+Large Language Models (`Ollama`, `llama.cpp`, `vLLM`) on sensitive
+human-subjects text—therapy notes, student writing, EMA journals,
+patient narratives—under strict **IRB, HIPAA, and FERPA** controls with
+zero external API leakage.
+
+## Core Pillars
+
+1.  **Air-Gapped Container Lifecycle & GPU Sizing**
+    - [`airgap_container_spec()`](https://marcusharrisphd.com/airgapllm/reference/airgap_container_spec.md),
+      [`emit_docker_run()`](https://marcusharrisphd.com/airgapllm/reference/emit_docker_run.md),
+      [`emit_docker_compose()`](https://marcusharrisphd.com/airgapllm/reference/emit_docker_compose.md),
+      and
+      [`emit_apptainer_def()`](https://marcusharrisphd.com/airgapllm/reference/emit_apptainer_def.md)
+      generate digest-pinned, hardened Docker (`--network none`,
+      `--read-only`, `--cap-drop ALL`, `no-new-privileges`, read-only
+      model mounts, offline telemetry suppression, optional NVIDIA/ROCm
+      GPU passthrough) and HPC Apptainer `.def` recipes for `Ollama`,
+      `llama.cpp`, and `vLLM`.
+    - [`verify_model_digest()`](https://marcusharrisphd.com/airgapllm/reference/verify_model_digest.md)
+      computes streaming SHA-256 digests on local GGUF or sharded
+      safetensors model files without loading weights into RAM,
+      enforcing strict symlink and directory confinement.
+    - [`preflight_isolation_check()`](https://marcusharrisphd.com/airgapllm/reference/preflight_isolation_check.md)
+      and
+      [`is_loopback_endpoint()`](https://marcusharrisphd.com/airgapllm/reference/is_loopback_endpoint.md)
+      validate container hardening posture, verify model SHA-256 pins,
+      reject SSRF/non-loopback/spoofed URLs, fail closed on unbypassed
+      outbound proxy env vars, and emit a cryptographically hashed (and
+      optionally HMAC-signed) attestation record.
+    - [`estimate_vram_requirements()`](https://marcusharrisphd.com/airgapllm/reference/estimate_vram_requirements.md)
+      right-sizes workstation and HPC GPU memory across quantizations
+      (`Q4_K_M`, `Q6_K`, `Q8_0`, `FP16`), context lengths, and batch
+      sizes.
+2.  **Pre-Inference Privacy, PII & HIPAA Safe Harbor Engine**
+    - [`pii_config()`](https://marcusharrisphd.com/airgapllm/reference/pii_config.md),
+      [`pii_detect()`](https://marcusharrisphd.com/airgapllm/reference/pii_detect.md),
+      [`pii_redact()`](https://marcusharrisphd.com/airgapllm/reference/pii_redact.md),
+      [`pii_privacy_report()`](https://marcusharrisphd.com/airgapllm/reference/pii_privacy_report.md),
+      and
+      [`pii_audit_dataframe()`](https://marcusharrisphd.com/airgapllm/reference/pii_audit_dataframe.md)
+      deterministically scan and scrub emails, SSNs, US/international
+      phone numbers, dates/DOBs, MRNs/student IDs, IPv4/IPv6 addresses,
+      street addresses, **HIPAA Safe Harbor ages \> 89 and US ZIP codes
+      / 17 restricted 3-digit prefixes**
+      ([`hipaa_restricted_zip3()`](https://marcusharrisphd.com/airgapllm/reference/hipaa_restricted_zip3.md)),
+      titled/role-cued/unlabeled person names (with Unicode homoglyph &
+      zero-width obfuscator normalization and O(M log M + N) ReDoS-safe
+      execution), plus custom regexes, custom literal dictionaries, and
+      clinical allowlists.
+    - [`pii_pseudonymize()`](https://marcusharrisphd.com/airgapllm/reference/pii_pseudonymize.md),
+      [`pii_reidentify()`](https://marcusharrisphd.com/airgapllm/reference/pii_reidentify.md),
+      [`pii_vault_key()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_key.md),
+      [`pii_vault_save()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_save.md),
+      [`pii_vault_load()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_load.md),
+      and
+      [`pii_vault_rotate_key()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_rotate_key.md)
+      implement deterministic keyed reversible pseudonymization using
+      **RFC 5869 HKDF-SHA256 + HMAC-SHA256**, storing raw mappings
+      inside a separate **AES-256-CBC + HMAC-SHA256** (Encrypt-then-MAC
+      with per-save random salts, fresh IVs, AAD binding, constant-time
+      MAC verification, and atomic key rotation) local vault with
+      owner-only (`0600`) permissions.
+3.  **Resumable Schema-Enforced Batch Extractor**
+    - [`chunk_clinical_texts()`](https://marcusharrisphd.com/airgapllm/reference/chunk_clinical_texts.md)
+      splits long therapy transcripts and interviews into deterministic
+      paragraph- or sentence-aligned overlapping chunks preserving
+      `doc_id`, `chunk_id`, and offset provenance.
+    - [`extraction_schema()`](https://marcusharrisphd.com/airgapllm/reference/extraction_schema.md)
+      and
+      [`schema_field()`](https://marcusharrisphd.com/airgapllm/reference/schema_field.md)
+      declare strict scalar types (`character`, `integer`, `numeric`,
+      `logical`, `enum`), nullability, numeric ranges, string lengths,
+      and regex constraints, exporting standard JSON Schema
+      ([`as_json_schema()`](https://marcusharrisphd.com/airgapllm/reference/as_json_schema.md)).
+    - [`airgap_extract()`](https://marcusharrisphd.com/airgapllm/reference/airgap_extract.md)
+      processes R data frames (including Latin-1 / Windows-1252 clinical
+      CSV exports and 0-row frames) into strictly typed tibbles with
+      mandatory pre-inference PII controls, delimited
+      `<UNTRUSTED_RESEARCH_RECORD>` prompt-injection framing,
+      **post-inference output PII leakage scanning**
+      (`output_pii_action`), automated structured repair retries
+      ([`build_repair_prompt()`](https://marcusharrisphd.com/airgapllm/reference/build_repair_prompt.md)),
+      and crash-resumable atomic per-row JSONL checkpointing with
+      schema/prompt compatibility guards.
+    - Pluggable strictly-local runtimes:
+      [`runtime_ollama()`](https://marcusharrisphd.com/airgapllm/reference/runtime_ollama.md),
+      [`runtime_openai_local()`](https://marcusharrisphd.com/airgapllm/reference/runtime_openai_local.md)
+      (`llama.cpp` / `vLLM`, enforcing canonical loopback hosts and
+      `noproxy = "*"`), and
+      [`runtime_mock()`](https://marcusharrisphd.com/airgapllm/reference/runtime_mock.md)
+      (deterministic offline runtime for testing and dry-runs).
+4.  **Immutable IRB/HIPAA Audit Trail & Compliance Packets**
+    - [`audit_log_append()`](https://marcusharrisphd.com/airgapllm/reference/audit_log_append.md),
+      [`audit_log_read()`](https://marcusharrisphd.com/airgapllm/reference/audit_log_read.md),
+      and
+      [`audit_log_verify()`](https://marcusharrisphd.com/airgapllm/reference/audit_log_verify.md)
+      maintain a tamper-evident SHA-256 hash-chained JSONL ledger
+      (`GENESIS -> entry_1 -> entry_2 -> ...`) enforcing strict schema
+      allowlists and active PII rejection (`airgap_audit_privacy_error`)
+      so raw participant text never enters compliance logs.
+    - [`generate_irb_narrative()`](https://marcusharrisphd.com/airgapllm/reference/generate_irb_narrative.md)
+      renders ready-to-paste Markdown or Quarto IRB/HIPAA/FERPA Methods
+      and Data-Security protocol boilerplate directly from verified runs
+      and audit logs.
+    - [`export_irb_compliance_packet()`](https://marcusharrisphd.com/airgapllm/reference/export_irb_compliance_packet.md)
+      assembles a self-contained, SHA-256-sealed, zero-PII IRB/HIPAA
+      audit directory ready for protocol submission.
+
+## Installation
+
+``` r
+
+# Install the development version from GitHub:
+# install.packages("remotes")
+remotes::install_github("MarcusHarrisUConn/airgapllm")
+```
+
+## Quick Start
+
+``` r
+
+library(airgapllm)
+
+# 1. Load bundled 100% synthetic clinical/EMA/educational dataset & run privacy dry-run
+data("synthetic_notes", package = "airgapllm")
+pii_audit_dataframe(synthetic_notes, "note_text", id_col = "note_id")
+
+# 2. Size GPU VRAM & define a hardened, pinned air-gapped container spec
+estimate_vram_requirements(8, quantization = "Q4_K_M", context_length = 8192L)
+
+spec <- airgap_container_spec(
+  backend = "ollama",
+  image = "ollama/ollama",
+  image_digest = paste0("sha256:", strrep("a", 64)),
+  model_dir = "/srv/models/llama3",
+  model_digest = paste0("sha256:", strrep("b", 64)),
+  gpu = "nvidia"
+)
+
+# 3. Define a strict output schema & execute offline extraction with audit trail
+schema <- extraction_schema(
+  sentiment = schema_field("enum", values = c("positive", "neutral", "negative")),
+  severity = schema_field("integer", min = 0L, max = 10L),
+  crisis_flag = schema_field("logical")
+)
+
+audit_file <- tempfile(fileext = ".audit.jsonl")
+ck_file <- tempfile(fileext = ".checkpoint.jsonl")
+
+# Use runtime_ollama() or runtime_openai_local() in production; runtime_mock() offline
+results <- airgap_extract(
+  data = synthetic_notes[1:6, ],
+  text_col = "note_text",
+  schema = schema,
+  runtime = runtime_mock(seed = 42L),
+  id_col = "note_id",
+  pii_policy = "redact",
+  checkpoint_path = ck_file,
+  audit_log_path = audit_file,
+  container_spec = spec
+)
+
+results
+
+# 4. Verify cryptographic audit chain & export SHA-256-sealed IRB compliance packet
+audit_log_verify(audit_file)
+pkt_dir <- file.path(tempdir(), "irb_compliance_packet")
+export_irb_compliance_packet(
+  out_dir = pkt_dir,
+  extraction = results,
+  audit_log_path = audit_file,
+  container_spec = spec,
+  protocol_id = "IRB-2026-0412",
+  overwrite = TRUE
+)
+```
+
+## Documentation & Guides
+
+- **Website & Reference:** <https://marcusharrisphd.com/airgapllm/>
+- **Security Audit:** See
+  [SECURITY.md](https://marcusharrisphd.com/airgapllm/SECURITY.md) for
+  the v0.2.0 adversarial red-team audit, SSRF/injection mitigations, and
+  cryptographic vault specification.
+- **Architecture:** See
+  [ARCHITECTURE.md](https://marcusharrisphd.com/airgapllm/ARCHITECTURE.md)
+  for the formal threat & privacy model, container hardening
+  specification, and cryptographic audit log schema.
+- **Vignettes:**
+  - [`vignette("getting-started", package = "airgapllm")`](https://marcusharrisphd.com/airgapllm/articles/getting-started.md)
+  - [`vignette("privacy-and-compliance", package = "airgapllm")`](https://marcusharrisphd.com/airgapllm/articles/privacy-and-compliance.md)
+  - [`vignette("irb-hipaa-compliance-walkthrough", package = "airgapllm")`](https://marcusharrisphd.com/airgapllm/articles/irb-hipaa-compliance-walkthrough.md)
+  - [`vignette("hpc-gpu-deployment", package = "airgapllm")`](https://marcusharrisphd.com/airgapllm/articles/hpc-gpu-deployment.md)
+
+## License
+
+MIT © Marcus Harris

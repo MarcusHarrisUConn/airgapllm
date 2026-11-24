@@ -11,6 +11,6 @@ Checked locally on macOS (`aarch64-apple-darwin23`, R 4.6.1):
 
 ## CRAN Submission Notes
 
-* This is the first CRAN submission of `airgapllm` (v0.5.1).
+* This is the first CRAN submission of `airgapllm` (v0.5.2).
 * All examples, unit tests, and 5 vignettes execute 100% offline using the built-in deterministic `runtime_mock()`, perform zero outbound network calls, write exclusively to `tempdir()` with explicit cleanup, respect `<= 2` CPU cores, and leave global state (`options()`, `par()`, `Sys.setenv()`, `.Random.seed`) unchanged.
 * Bundled dataset `synthetic_notes` is 100% fictional and contains zero real personal or protected health information.

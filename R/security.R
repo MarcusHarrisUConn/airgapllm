@@ -363,11 +363,38 @@ canonical_compare_path <- function(path) {
   if (identical(.Platform$OS.type, "windows")) tolower(canon) else canon
 }
 
-#' Check whether a path is a symbolic link
+#' Check whether a path is a symbolic link (POSIX Sys.readlink + Windows NTFS fallback)
 #' @noRd
 is_symlink_path <- function(path) {
-  rl <- suppressWarnings(Sys.readlink(path))
-  !is.na(rl) && nzchar(rl)
+  p <- strip_trailing_sep(path)
+  rl <- suppressWarnings(Sys.readlink(p))
+  if (!is.na(rl) && nzchar(rl)) {
+    return(TRUE)
+  }
+  # Fallback for Windows NTFS file/directory symlinks & junctions where Sys.readlink()
+  # may return "" while normalizePath() resolves the underlying reparse-point target.
+  if (file.exists(p) || dir.exists(p)) {
+    parent <- dirname(p)
+    if (!identical(parent, p) && dir.exists(parent)) {
+      canon_self <- canonical_compare_path(p)
+      canon_parent <- canonical_compare_path(parent)
+      base_cmp <- if (identical(.Platform$OS.type, "windows")) tolower(basename(p)) else basename(p)
+      expected <- paste0(
+        if (endsWith(canon_parent, "/")) canon_parent else paste0(canon_parent, "/"),
+        base_cmp
+      )
+      if (!identical(canon_self, expected)) {
+        # Exclude Windows 8.3 short-name directory aliases (e.g. RUNNER~1 -> runneradmin) in same parent
+        if (identical(.Platform$OS.type, "windows") &&
+            identical(strip_trailing_sep(dirname(canon_self)), canon_parent) &&
+            grepl("~[0-9]", basename(p))) {
+          return(FALSE)
+        }
+        return(TRUE)
+      }
+    }
+  }
+  FALSE
 }
 
 #' Check whether a path is a canonical macOS root OS symlink alias (/var, /tmp, /etc)

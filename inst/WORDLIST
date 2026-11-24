@@ -40,6 +40,7 @@ Lifecycle
 Loopback
 MRNs
 NANP
+NTFS
 NUL
 OOM
 Ollama
@@ -63,6 +64,7 @@ Sanitization
 Slurm
 Symlink
 Symlinked
+VM
 VRAM
 Verifiably
 Walkthrough
@@ -118,6 +120,7 @@ pseudonymized
 quantizations
 quantized
 regexes
+reparse
 resumable
 runnable
 safetensors

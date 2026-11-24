@@ -19,12 +19,15 @@ clone_runtime_with_seed <- function(runtime, seed) {
 aggregate_field_passes <- function(vals, field, numeric_agg, trim, tie_policy) {
   n_total <- length(vals)
   if (n_total == 0L) {
-    return(list(value = typed_na_for_field(field), agreement = NA_real_, tie = FALSE, unanimous = FALSE))
+    return(list(value = typed_na_for_field(field), agreement = NA_real_, tie = FALSE, unanimous = NA))
   }
 
   non_na <- vals[!is.na(vals)]
   if (length(non_na) == 0L) {
-    # All successful passes agreed on NA (nullable field)
+    # All successful passes agreed on NA (nullable field); single pass has no cross-pass agreement
+    if (n_total < 2L) {
+      return(list(value = typed_na_for_field(field), agreement = NA_real_, tie = FALSE, unanimous = NA))
+    }
     return(list(value = typed_na_for_field(field), agreement = 1, tie = FALSE, unanimous = TRUE))
   }
 
@@ -35,8 +38,13 @@ aggregate_field_passes <- function(vals, field, numeric_agg, trim, tie_policy) {
     top_cnt <- max(counts)
     winners <- uniq_vals[counts == top_cnt]
     is_tie <- length(winners) > 1L
-    agree <- top_cnt / length(non_na)
-    unanimous <- length(uniq_vals) == 1L
+    if (n_total < 2L || length(non_na) < 2L) {
+      agree <- NA_real_
+      unanimous <- NA
+    } else {
+      agree <- top_cnt / length(non_na)
+      unanimous <- length(uniq_vals) == 1L
+    }
 
     if (is_tie && identical(tie_policy, "na")) {
       val <- typed_na_for_field(field)
@@ -66,17 +74,33 @@ aggregate_field_passes <- function(vals, field, numeric_agg, trim, tie_policy) {
     if (!is.null(field$max)) agg_val <- min(field$max, agg_val)
   }
 
+  if (n_total < 2L || length(num_vals) < 2L) {
+    return(list(value = agg_val, agreement = NA_real_, tie = FALSE, unanimous = NA))
+  }
+
   unanimous <- length(unique(num_vals)) == 1L
   if (unanimous) {
     agree <- 1
   } else if (!is.null(field$min) && !is.null(field$max) && (field$max > field$min)) {
-    half_range <- (field$max - field$min) / 2
-    mad_val <- mean(abs(num_vals - stats::median(num_vals)))
-    agree <- max(0, min(1, 1 - mad_val / half_range))
+    # Overflow-safe range scaling for wide finite bounds (e.g., [-1e308, 1e308])
+    half_range <- (field$max / 2) - (field$min / 2)
+    if (is.finite(half_range) && half_range > 0) {
+      med_scaled <- stats::median(num_vals / half_range)
+      rel_mad <- mean(abs((num_vals / half_range) - med_scaled))
+      agree <- if (is.finite(rel_mad)) max(0, min(1, 1 - rel_mad)) else 0
+    } else {
+      agree <- 0
+    }
   } else {
-    sd_val <- stats::sd(num_vals)
-    scale_ref <- max(1, abs(stats::median(num_vals)))
-    agree <- 1 / (1 + sd_val / scale_ref)
+    scale_max <- max(abs(num_vals))
+    if (is.finite(scale_max) && scale_max > 0) {
+      scaled_v <- num_vals / scale_max
+      sd_scaled <- stats::sd(scaled_v)
+      med_scaled <- max(1 / scale_max, abs(stats::median(scaled_v)))
+      agree <- if (is.finite(sd_scaled)) 1 / (1 + sd_scaled / med_scaled) else 0
+    } else {
+      agree <- 1
+    }
   }
 
   list(value = agg_val, agreement = agree, tie = FALSE, unanimous = unanimous)
@@ -215,9 +239,10 @@ airgap_extract_consensus <- function(
   if (!inherits(runtime, "airgap_runtime")) {
     cli::cli_abort("{.arg runtime} must be an `airgap_runtime` object.", class = "airgap_validation_error")
   }
-  if (!is.numeric(trim) || length(trim) != 1L || is.na(trim) || trim < 0 || trim >= 0.5) {
-    cli::cli_abort("{.arg trim} must be a numeric scalar in [0, 0.5).", class = "airgap_validation_error")
+  if (!is.numeric(trim) || length(trim) != 1L || is.na(trim) || !is.finite(trim) || trim < 0 || trim >= 0.5) {
+    cli::cli_abort("{.arg trim} must be a finite numeric scalar in [0, 0.5).", class = "airgap_validation_error")
   }
+  max_retries <- assert_scalar_int(max_retries, "max_retries", min = 0L)
   if (is.null(pii_config)) {
     pii_config <- pii_config()
   }
@@ -225,21 +250,33 @@ airgap_extract_consensus <- function(
     cli::cli_abort("{.arg pii_config} must be an `airgap_pii_config` object.", class = "airgap_validation_error")
   }
 
+  id_col_name <- id_col %||% ".row_id"
+  reserved_cons <- unique(c(
+    id_col_name, "unit_id", "pass_id", "prompt_id", "seed",
+    ".agreement", ".passes_ok", ".passes_total", ".status", ".attempts"
+  ))
+  bad_fields <- intersect(names(schema$fields), reserved_cons)
+  if (length(bad_fields) > 0L) {
+    cli::cli_abort(
+      "Schema field name(s) collide with reserved consensus/ID columns: {paste(bad_fields, collapse = ', ')}.",
+      class = "airgap_validation_error"
+    )
+  }
+
   # Resolve crossed pass grid: seeds x prompt_templates
   base_seed <- as.integer(runtime$decoding_params$seed %||% 42L)
   if (!is.null(seeds)) {
-    if (!is.numeric(seeds) || length(seeds) == 0L || any(is.na(seeds)) || any(seeds != floor(seeds))) {
-      cli::cli_abort("{.arg seeds} must be a non-empty integer vector.", class = "airgap_validation_error")
+    if (!is.numeric(seeds) || is.logical(seeds) || length(seeds) == 0L ||
+        any(is.na(seeds)) || any(!is.finite(seeds)) || any(seeds != floor(seeds)) ||
+        any(abs(seeds) > .Machine$integer.max)) {
+      cli::cli_abort("{.arg seeds} must be a non-empty vector of finite integers.", class = "airgap_validation_error")
     }
     eff_seeds <- as.integer(seeds)
   } else if (!is.null(prompt_templates) && isTRUE(n_passes_missing)) {
     eff_seeds <- base_seed
   } else {
-    if (!is.numeric(n_passes) || length(n_passes) != 1L || is.na(n_passes) ||
-        n_passes < 1 || n_passes != floor(n_passes)) {
-      cli::cli_abort("{.arg n_passes} must be a positive integer.", class = "airgap_validation_error")
-    }
-    eff_seeds <- base_seed + seq_len(as.integer(n_passes)) - 1L
+    n_passes <- assert_scalar_int(n_passes, "n_passes", min = 1L)
+    eff_seeds <- base_seed + seq_len(n_passes) - 1L
   }
 
   if (!is.null(prompt_templates)) {
@@ -248,8 +285,26 @@ airgap_extract_consensus <- function(
       cli::cli_abort("{.arg prompt_templates} must be a non-empty character vector.", class = "airgap_validation_error")
     }
     p_names <- names(prompt_templates)
-    if (is.null(p_names) || any(!nzchar(p_names))) {
+    if (!is.null(p_names)) {
+      if (any(is.na(p_names)) || any(!nzchar(trimws(p_names)))) {
+        cli::cli_abort("Named {.arg prompt_templates} must not contain empty or NA names.", class = "airgap_validation_error")
+      }
+      if (anyDuplicated(p_names)) {
+        cli::cli_abort("Duplicate names are not permitted in {.arg prompt_templates}.", class = "airgap_validation_error")
+      }
+    } else {
       p_names <- paste0("P", seq_along(prompt_templates))
+    }
+    if (!identical(pii_policy, "verified_deidentified")) {
+      for (k in seq_along(prompt_templates)) {
+        td <- pii_detect(prompt_templates[k], config = pii_config, include_values = FALSE)
+        if (nrow(td) > 0L) {
+          cli::cli_abort(
+            "Pre-inference privacy violation: `prompt_templates[[{k}]]` contains raw PII ({paste(sort(unique(td$entity_type)), collapse = ', ')}).",
+            class = "airgap_privacy_error"
+          )
+        }
+      }
     }
     eff_prompts <- stats::setNames(as.list(prompt_templates), p_names)
   } else {
@@ -314,7 +369,9 @@ airgap_extract_consensus <- function(
 
   san_data <- data
   san_data[[text_col]] <- san_texts
-  id_col_name <- id_col %||% ".row_id"
+  if (identical(pii_policy, "pseudonymize") && !is.null(active_vault)) {
+    attr(san_data, ".airgap_preserve_tokens") <- names(active_vault$mappings)
+  }
   row_ids <- if (is.null(id_col)) as.character(seq_len(nrow(data))) else as.character(data[[id_col]])
   run_id <- run_id %||% generate_run_id("consensus")
 
@@ -331,8 +388,10 @@ airgap_extract_consensus <- function(
   p_idx <- 0L
   t_start <- proc.time()[["elapsed"]]
 
-  for (p_nm in names(eff_prompts)) {
-    pt <- eff_prompts[[p_nm]]
+  prompt_names <- names(eff_prompts)
+  for (p_i in seq_along(eff_prompts)) {
+    p_nm <- prompt_names[p_i]
+    pt <- eff_prompts[[p_i]]
     for (sd in eff_seeds) {
       p_idx <- p_idx + 1L
       pid <- sprintf("pass_%02d", p_idx)
@@ -343,7 +402,7 @@ airgap_extract_consensus <- function(
       }
 
       # Text is already sanitized under pii_policy; pass verified_deidentified internally while
-      # preserving explicit output_pii_action scanning against the active pii_config
+      # preserving genuine vault tokens (via .airgap_preserve_tokens) and explicit output_pii_action
       pass_tbl <- airgap_extract(
         data = san_data,
         text_col = text_col,
@@ -431,7 +490,7 @@ airgap_extract_consensus <- function(
       field_unanimous_mat[i, j] <- agg$unanimous
       field_tie_mat[i, j] <- agg$tie
     }
-    row_agreement[i] <- round(mean(agrees_i, na.rm = TRUE), 4)
+    row_agreement[i] <- if (all(is.na(agrees_i))) NA_real_ else round(mean(agrees_i, na.rm = TRUE), 4)
   }
 
   out_cols[[".agreement"]] <- row_agreement

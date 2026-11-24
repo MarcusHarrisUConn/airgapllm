@@ -468,7 +468,12 @@ test_that("airgap_extract mitigates prompt injection via delimited framing and p
   expect_equal(res_bad$.status, "failed")
   ck_err_blob <- paste(readLines(ck_err, warn = FALSE), collapse = "\n")
   expect_false(grepl("secret.patient@clinic.org", ck_err_blob, fixed = TRUE))
-  expect_match(ck_err_blob, "REDACTED_EMAIL", fixed = TRUE)
+  expect_match(ck_err_blob, "not in allowed enum values", fixed = TRUE)
+
+  # Direct check that sanitize_checkpoint_error still redacts PII in generic error strings
+  san_err <- sanitize_checkpoint_error("Parse error near secret.patient@clinic.org", pii_config())
+  expect_false(grepl("secret.patient@clinic.org", san_err, fixed = TRUE))
+  expect_match(san_err, "REDACTED_EMAIL", fixed = TRUE)
 })
 
 test_that("checkpoints and audit logs defeat corrupted UTF-8, NUL bytes, insertions, and obfuscated metadata PII", {

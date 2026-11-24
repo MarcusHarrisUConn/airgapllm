@@ -152,7 +152,7 @@ pii_config <- function(
         suppressWarnings(grepl(pat, "", perl = TRUE)),
         error = function(e) {
           cli::cli_abort(
-            c("Invalid PCRE regular expression in `custom_patterns[['{nm}']]`.", "x" = conditionMessage(e)),
+            c("Invalid PCRE regular expression in `custom_patterns[['{nm}']]`.", "x" = "{conditionMessage(e)}"),
             class = "airgap_validation_error"
           )
         }
@@ -408,7 +408,7 @@ detect_pii_single <- function(text, config, stopwords) {
       "Lane|Ln\\.?|Court|Ct\\.?|Way|Place|Pl\\.?|Circle|Cir\\.?|Terrace|Ter\\.?|",
       "Parkway|Pkwy\\.?|Highway|Hwy\\.?|Trail|Trl\\.?)",
       "(?:(?:,\\s{0,2}|\\s{1,2})(?i:Apt\\.?|Apartment|Suite|Ste\\.?|Unit|#)\\s{0,2}[A-Za-z0-9-]{1,12})?",
-      "(?:,\\s{0,2}[A-Z][a-zA-Z.-]{1,24}(?:\\s[A-Za-z.-]{1,24}){0,2},\\s{0,2}[A-Z]{2}\\s{1,2}\\d{5}(?:-\\d{4})?)?",
+      "(?:(?:,|\\r?\\n)[ \\t]{0,2}[A-Z][a-zA-Z.-]{1,24}(?:[ \\t][A-Za-z.-]{1,24}){0,2},[ \\t]{0,2}[A-Z]{2}[ \\t]{1,2}\\d{5}(?:-\\d{4})?)?",
       "(?![A-Za-z0-9])"
     )
     add_spans(match_spans_regex(scan_text, street_pat, "street_address", priority = 30L))
@@ -572,10 +572,10 @@ detect_pii_single <- function(text, config, stopwords) {
     ))
   }
 
-  # Priority 60: Person names (ReDoS-safe bounded titled, role-labeled, and optional unlabeled heuristic)
+  # Priority 60: Person names (ReDoS-safe bounded titled, role-labeled, ALL-CAPS EHR, and optional unlabeled heuristic)
   if ("person_name" %in% ents) {
-    # 1. Titled names (Dr., Mr., Mrs., Ms., Prof., etc.)
-    titled_pat <- "\\b(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor|Rev|Hon)\\.?\\s{1,2}[A-Z][a-zA-Z'-]{1,25}(?:\\s{1,2}[A-Z]\\.)?(?:\\s{1,2}[A-Z][a-zA-Z'-]{1,25}){0,2}\\b"
+    # 1. Titled names (Dr., Mr., Mrs., Ms., Prof., etc.; supports Title Case and ALL-CAPS EHR notes)
+    titled_pat <- "\\b(?i:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor|Rev|Hon)\\.?[ \\t]{1,2}[A-Z][a-zA-Z'-]{1,25}(?:[ \\t]{1,2}[A-Z]\\.)?(?:[ \\t]{1,2}[A-Z][a-zA-Z'-]{1,25}){0,2}\\b"
     add_spans(match_spans_regex(
       scan_text,
       titled_pat,
@@ -589,8 +589,8 @@ detect_pii_single <- function(text, config, stopwords) {
       }
     ))
 
-    # 2. Role-cued names ("Patient: Jane Doe", "Student: Marcus Harris")
-    role_pat <- "\\b(?:Patient|Client|Student|Participant|Subject|Clinician|Therapist|Physician|Doctor|Parent|Guardian|Name)\\s{0,2}:\\s{0,2}([A-Z][a-zA-Z'-]{1,25}(?:\\s{1,2}[A-Z]\\.)?(?:\\s{1,2}[A-Z][a-zA-Z'-]{1,25}){0,2})\\b"
+    # 2. Role-cued names with colon ("Patient: Jane Doe", "PATIENT: JOHN DOE", "Student: Marcus Harris")
+    role_pat <- "\\b(?i:Patient|Client|Student|Participant|Subject|Clinician|Therapist|Physician|Doctor|Parent|Guardian|Name|Attending|Provider|Resident|Nurse)[ \\t]{0,2}:[ \\t]{0,2}([A-Z][a-zA-Z'-]{1,25}(?:[ \\t]{1,2}[A-Z]\\.)?(?:[ \\t]{1,2}[A-Z][a-zA-Z'-]{1,25}){0,2})\\b"
     add_spans(match_spans_regex(
       scan_text,
       role_pat,
@@ -600,6 +600,23 @@ detect_pii_single <- function(text, config, stopwords) {
       filter_fn = function(val, ...) {
         toks <- tolower(gsub("[^A-Za-z]", "", strsplit(trimws(val), "\\s+")[[1L]]))
         !all(toks %in% stopwords)
+      }
+    ))
+
+    # 2b. Role-cued full names without colon (e.g., "ATTENDING ROBERT MILLER", "PATIENT JOHN DOE")
+    role_space_pat <- "\\b(?i:Attending|Patient|Physician|Clinician|Therapist|Doctor|Provider)[ \\t]{1,2}([A-Z][a-zA-Z'-]{1,25}(?:[ \\t]{1,2}[A-Z]\\.)?[ \\t]{1,2}[A-Z][a-zA-Z'-]{1,25})\\b"
+    add_spans(match_spans_regex(
+      scan_text,
+      role_space_pat,
+      "person_name",
+      priority = 60L,
+      capture_group = 1L,
+      filter_fn = function(val, ...) {
+        toks <- strsplit(trimws(val), "\\s+")[[1L]]
+        non_init <- toks[!grepl("^[A-Z]\\.$", toks)]
+        if (length(non_init) < 2L) return(FALSE)
+        clean_toks <- tolower(gsub("[^A-Za-z]", "", non_init))
+        !any(clean_toks %in% stopwords)
       }
     ))
 
@@ -626,12 +643,13 @@ detect_pii_single <- function(text, config, stopwords) {
     }
   }
 
-  # Map canonical offsets back to exact character indices in original text
+  # Map canonical offsets back to exact character indices in original text (including trailing combining marks)
   if (length(spans) > 0L) {
     orig_idx <- canon$orig_idx
+    orig_end_idx <- canon$orig_end_idx %||% orig_idx
     spans <- lapply(spans, function(sp) {
       o_start <- orig_idx[sp$start]
-      o_end <- orig_idx[sp$end]
+      o_end <- orig_end_idx[sp$end]
       sp$canonical_match <- sp$match
       sp$start <- o_start
       sp$end <- o_end
@@ -937,10 +955,8 @@ pii_redact <- function(
 #' key <- pii_vault_key()
 #' nchar(key)
 pii_vault_key <- function(n_bytes = 32L) {
-  if (!is.numeric(n_bytes) || length(n_bytes) != 1L || is.na(n_bytes) || n_bytes < 16 || n_bytes != floor(n_bytes)) {
-    cli::cli_abort("{.arg n_bytes} must be an integer >= 16.", class = "airgap_validation_error")
-  }
-  paste(as.character(openssl::rand_bytes(as.integer(n_bytes))), collapse = "")
+  n_bytes <- assert_scalar_int(n_bytes, "n_bytes", min = 16L)
+  paste(as.character(openssl::rand_bytes(n_bytes)), collapse = "")
 }
 
 #' Create an empty or hydrated PII mapping vault object
@@ -1106,8 +1122,12 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
     out_text <- jsonlite::toJSON(envelope, auto_unbox = TRUE, pretty = TRUE)
   }
 
+  assert_safe_write_target(path, arg = "path")
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   tmp_path <- paste0(path, ".tmp.", Sys.getpid())
+  assert_safe_write_target(tmp_path, arg = "tmp_path")
+  file.create(tmp_path)
+  suppressWarnings(Sys.chmod(tmp_path, mode = "0600"))
   writeLines(as.character(out_text), con = tmp_path, useBytes = TRUE)
   suppressWarnings(Sys.chmod(tmp_path, mode = "0600"))
   file.rename(tmp_path, path)
@@ -1121,9 +1141,15 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
 #' file written by [pii_vault_save()]. Verifies the HMAC-SHA256 authentication
 #' tag in constant time BEFORE decryption to defeat padding-oracle and timing
 #' attacks while never exposing plaintext or key material in error messages.
+#' Refuses unencrypted vault files whenever `key` is supplied or
+#' `require_encrypted = TRUE` to prevent encryption-downgrade attacks.
 #'
 #' @param path Character scalar path to the vault file.
 #' @param key Secret key (required when the vault file is encrypted).
+#' @param require_encrypted Logical scalar; if `TRUE` (default whenever `key`
+#'   is supplied), aborts if the vault file has `encrypted = FALSE`. Pass
+#'   `require_encrypted = FALSE` with `key = NULL` only when explicitly loading
+#'   an unencrypted development vault.
 #'
 #' @return An `airgap_pii_vault` object.
 #'
@@ -1136,9 +1162,10 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
 #' loaded <- pii_vault_load(vf, key = key)
 #' loaded
 #' unlink(vf)
-pii_vault_load <- function(path, key = NULL) {
+pii_vault_load <- function(path, key = NULL, require_encrypted = !is.null(key)) {
   assert_scalar_string(path, "path")
   assert_no_control_chars(path, "path")
+  assert_scalar_logical(require_encrypted, "require_encrypted")
   if (!file.exists(path)) {
     cli::cli_abort("Vault file not found: {.path {path}}.", class = "airgap_vault_error")
   }
@@ -1151,6 +1178,13 @@ pii_vault_load <- function(path, key = NULL) {
   fmt <- env$format
   if (!is.character(fmt) || length(fmt) != 1L || !fmt %in% c("airgapllm_vault_v2", "airgapllm_vault_v1")) {
     cli::cli_abort("Unsupported or invalid vault file format.", class = "airgap_vault_error")
+  }
+
+  if (!isTRUE(env$encrypted) && (isTRUE(require_encrypted) || !is.null(key))) {
+    cli::cli_abort(
+      "Vault encryption downgrade rejected: vault file is unencrypted (`encrypted = FALSE`), but an authenticated encrypted vault was expected.",
+      class = "airgap_vault_error"
+    )
   }
 
   if (isTRUE(env$encrypted)) {
@@ -1287,15 +1321,25 @@ pii_vault_rotate_key <- function(
     )
   }
 
-  # Authenticate and decrypt existing vault under old_key
-  vault <- pii_vault_load(path, key = old_key)
+  # Authenticate and decrypt existing vault under old_key (requires encrypted vault)
+  vault <- pii_vault_load(path, key = old_key, require_encrypted = TRUE)
   old_fp <- vault$key_fingerprint
   rotated_at <- utc_timestamp()
+
+  assert_safe_write_target(out_path, arg = "out_path")
 
   if (isTRUE(backup) && identical(normalizePath(path, winslash = "/", mustWork = FALSE),
                                   normalizePath(out_path, winslash = "/", mustWork = FALSE))) {
     bak_path <- paste0(path, ".bak")
-    file.copy(path, bak_path, overwrite = TRUE)
+    assert_safe_write_target(bak_path, arg = "backup path")
+    bak_tmp <- paste0(bak_path, ".tmp.", Sys.getpid())
+    assert_safe_write_target(bak_tmp, arg = "backup temp path")
+    raw_src <- readBin(path, what = "raw", n = file.info(path)$size)
+    file.create(bak_tmp)
+    suppressWarnings(Sys.chmod(bak_tmp, mode = "0600"))
+    writeBin(raw_src, con = bak_tmp)
+    suppressWarnings(Sys.chmod(bak_tmp, mode = "0600"))
+    file.rename(bak_tmp, bak_path)
     suppressWarnings(Sys.chmod(bak_path, mode = "0600"))
   }
 
@@ -1371,11 +1415,7 @@ pii_pseudonymize <- function(
   if (!inherits(config, "airgap_pii_config")) {
     cli::cli_abort("{.arg config} must be an `airgap_pii_config` object.", class = "airgap_validation_error")
   }
-  if (!is.numeric(token_length) || length(token_length) != 1L || is.na(token_length) ||
-      token_length < 8 || token_length > 32 || token_length != floor(token_length)) {
-    cli::cli_abort("{.arg token_length} must be an integer between 8 and 32.", class = "airgap_validation_error")
-  }
-  token_length <- as.integer(token_length)
+  token_length <- assert_scalar_int(token_length, "token_length", min = 8L, max = 32L)
   assert_scalar_logical(encrypt_vault, "encrypt_vault")
 
   subkeys <- derive_vault_subkeys(key)
@@ -1494,19 +1534,38 @@ pii_reidentify <- function(text, vault, key = NULL, cols = NULL) {
     if (!is.character(vec) || length(vec) == 0L || length(vault$mappings) == 0L) {
       return(vec)
     }
-    toks <- names(vault$mappings)
+    tok_pat <- "<<[A-Z0-9_]+_[0-9a-f]{8,32}>>"
     out <- vec
     for (i in seq_along(out)) {
-      if (is.na(out[i]) || !grepl("<<[A-Z0-9_]+_[0-9a-f]{8,32}>>", out[i], perl = TRUE)) {
-        next
-      }
       s <- out[i]
-      for (tok in toks) {
-        if (grepl(tok, s, fixed = TRUE)) {
-          s <- gsub(tok, vault$mappings[[tok]]$value, s, fixed = TRUE)
+      if (is.na(s) || !nzchar(s)) next
+      m <- gregexpr(tok_pat, s, perl = TRUE)[[1L]]
+      if (length(m) == 1L && m[1L] == -1L) next
+      starts <- as.integer(m)
+      lens <- as.integer(attr(m, "match.length"))
+      # Single-pass left-to-right token substitution prevents sequential double-substitution
+      pieces <- character()
+      pos <- 1L
+      total_n <- nchar(s, type = "chars")
+      for (k in seq_along(starts)) {
+        st <- starts[k]
+        en <- st + lens[k] - 1L
+        if (st > pos) {
+          pieces <- c(pieces, substr(s, pos, st - 1L))
         }
+        tok <- substr(s, st, en)
+        entry <- vault$mappings[[tok]]
+        if (!is.null(entry) && is.character(entry$value) && length(entry$value) == 1L) {
+          pieces <- c(pieces, entry$value)
+        } else {
+          pieces <- c(pieces, tok)
+        }
+        pos <- en + 1L
       }
-      out[i] <- s
+      if (pos <= total_n) {
+        pieces <- c(pieces, substr(s, pos, total_n))
+      }
+      out[i] <- paste0(pieces, collapse = "")
     }
     out
   }

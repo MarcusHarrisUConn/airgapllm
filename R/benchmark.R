@@ -58,23 +58,14 @@ recommend_runtime_config <- function(
   if (!is.numeric(ram_gb) || length(ram_gb) != 1L || is.na(ram_gb) || !is.finite(ram_gb) || ram_gb <= 0) {
     cli::cli_abort("{.arg ram_gb} must be a positive finite number.", class = "airgap_validation_error")
   }
-  if (!is.numeric(n_gpus) || length(n_gpus) != 1L || is.na(n_gpus) || n_gpus < 1 || n_gpus != floor(n_gpus)) {
-    cli::cli_abort("{.arg n_gpus} must be a positive integer.", class = "airgap_validation_error")
-  }
-  n_gpus <- as.integer(n_gpus)
-  if (!is.numeric(n_docs) || length(n_docs) != 1L || is.na(n_docs) || n_docs < 1 || n_docs != floor(n_docs)) {
-    cli::cli_abort("{.arg n_docs} must be a positive integer.", class = "airgap_validation_error")
-  }
-  n_docs <- as.integer(n_docs)
-  if (!is.numeric(avg_tokens) || length(avg_tokens) != 1L || is.na(avg_tokens) || avg_tokens < 64 || avg_tokens != floor(avg_tokens)) {
-    cli::cli_abort("{.arg avg_tokens} must be an integer >= 64.", class = "airgap_validation_error")
-  }
-  avg_tokens <- as.integer(avg_tokens)
+  n_gpus <- assert_scalar_int(n_gpus, "n_gpus", min = 1L)
+  n_docs <- assert_scalar_int(n_docs, "n_docs", min = 1L)
+  avg_tokens <- assert_scalar_int(avg_tokens, "avg_tokens", min = 64L)
   priority <- match.arg(priority)
   backend <- match.arg(backend)
   if (!is.numeric(safety_margin) || length(safety_margin) != 1L || is.na(safety_margin) ||
-      safety_margin <= 0.5 || safety_margin > 0.98) {
-    cli::cli_abort("{.arg safety_margin} must be in (0.5, 0.98].", class = "airgap_validation_error")
+      !is.finite(safety_margin) || safety_margin <= 0.5 || safety_margin > 0.98) {
+    cli::cli_abort("{.arg safety_margin} must be a finite number in (0.5, 0.98].", class = "airgap_validation_error")
   }
 
   # Choose power-of-2 context window accommodating input + schema prompt + structured output
@@ -135,10 +126,14 @@ recommend_runtime_config <- function(
     }
   }
 
-  if (length(rows) == 0L) {
+  fallback_used <- length(rows) == 0L
+  feasible <- !fallback_used
+
+  if (fallback_used) {
     # Ultra-constrained fallback: 3B Q4_K_M at 2048 context
     context_length <- 2048L
     est_fb <- estimate_vram_requirements(3, "Q4_K_M", context_length = context_length, batch_size = 1L, kv_cache_quant = "Q4_0", overhead_gb = 0.6)
+    feasible <- isTRUE(est_fb$total_vram_gb <= usable_budget)
     rows[[1L]] <- list(
       params_b = 3,
       quantization = "Q4_K_M",
@@ -150,6 +145,16 @@ recommend_runtime_config <- function(
       score = 0
     )
     chunking_rec <- TRUE
+    if (!feasible) {
+      cli::cli_warn(
+        c(
+          "No candidate local model configuration fits within the available usable memory budget ({round(usable_budget, 2)} GB).",
+          "!" = "Fallback 3B Q4_K_M requires ~{est_fb$total_vram_gb} GB ({rows[[1L]]$utilization_pct}% utilization) and risks OOM.",
+          "i" = "Allocate additional GPU VRAM / host RAM or switch to CPU-only mode with sufficient system RAM."
+        ),
+        class = "airgap_hardware_warning"
+      )
+    }
   }
 
   cand_tbl <- tibble::tibble(
@@ -171,12 +176,24 @@ recommend_runtime_config <- function(
     context_length = best$context_length,
     batch_size = best$batch_size,
     kv_cache_quant = best$kv_cache_quant,
-    overhead_gb = if (cpu_only) 0.8 else 1.2
+    overhead_gb = if (fallback_used) 0.6 else if (cpu_only) 0.8 else 1.2
   )
 
-  # Container host memory & shared memory sizing
-  container_mem_gb <- max(4L, as.integer(floor(min(ram_gb * 0.75, max(8, best$estimated_vram_gb * 1.5)))))
-  shm_gb <- if (identical(backend, "vllm")) max(2L, min(16L, as.integer(ceiling(container_mem_gb * 0.25)))) else 2L
+  # Container host memory & shared memory sizing — strictly capped at physical host ram_gb
+  if (ram_gb >= 1) {
+    ram_cap_gb <- as.integer(floor(ram_gb))
+    target_mem_gb <- max(4L, as.integer(floor(min(ram_gb * 0.75, max(8, best$estimated_vram_gb * 1.5)))))
+    container_mem_gb <- max(1L, min(ram_cap_gb, target_mem_gb))
+    raw_shm_gb <- if (identical(backend, "vllm")) max(2L, min(16L, as.integer(ceiling(container_mem_gb * 0.25)))) else 2L
+    shm_gb <- min(max(1L, as.integer(floor(container_mem_gb / 2))), raw_shm_gb)
+    container_mem_str <- paste0(container_mem_gb, "g")
+    container_shm_str <- paste0(shm_gb, "g")
+  } else {
+    ram_cap_mb <- max(128L, as.integer(floor(ram_gb * 1024)))
+    shm_mb <- max(64L, as.integer(floor(ram_cap_mb / 4)))
+    container_mem_str <- paste0(ram_cap_mb, "m")
+    container_shm_str <- paste0(shm_mb, "m")
+  }
 
   tier_label <- paste0(best$params_b, "B open-weights (", best$quantization, ")")
   rationale <- c(
@@ -190,10 +207,16 @@ recommend_runtime_config <- function(
       best$estimated_vram_gb, " GB estimated)."
     ),
     paste0(
-      "Container memory limit set to ", container_mem_gb, "g (shm_size=", shm_gb,
-      "g) for backend='", backend, "'."
+      "Container memory limit set to ", container_mem_str, " (shm_size=", container_shm_str,
+      ") for backend='", backend, "'."
     )
   )
+  if (!feasible) {
+    rationale <- c(
+      rationale,
+      "WARNING: Hardware budget is below minimum 3B Q4_K_M VRAM requirements; configuration is marked infeasible (OOM risk)."
+    )
+  }
   if (isTRUE(chunking_rec)) {
     rationale <- c(
       rationale,
@@ -217,6 +240,7 @@ recommend_runtime_config <- function(
         backend = backend
       ),
       recommended = list(
+        feasible = isTRUE(feasible),
         params_b = best$params_b,
         model_tier = tier_label,
         quantization = best$quantization,
@@ -225,8 +249,8 @@ recommend_runtime_config <- function(
         kv_cache_quant = best$kv_cache_quant,
         estimated_vram_gb = best$estimated_vram_gb,
         vram_utilization_pct = best$utilization_pct,
-        container_memory_limit = paste0(container_mem_gb, "g"),
-        container_shm_size = paste0(shm_gb, "g"),
+        container_memory_limit = container_mem_str,
+        container_shm_size = container_shm_str,
         gpu_flag = if (cpu_only) "none" else "nvidia",
         tensor_parallel_size = if (!cpu_only && n_gpus > 1L) n_gpus else 1L,
         chunking_recommended = isTRUE(chunking_rec)
@@ -243,7 +267,9 @@ recommend_runtime_config <- function(
 print.airgap_runtime_recommendation <- function(x, ...) {
   r <- x$recommended
   cat("<airgap_runtime_recommendation> [backend=", x$workload$backend,
-      ", priority=", x$workload$priority, "]\n", sep = "")
+      ", priority=", x$workload$priority,
+      if (isFALSE(r$feasible)) ", INFEASIBLE/OOM RISK" else "",
+      "]\n", sep = "")
   cat("  Hardware:        ",
       if (x$hardware$gpu_mode == "none") paste0("CPU-only (", x$hardware$ram_gb, " GB RAM)")
       else paste0(x$hardware$n_gpus, "x ", x$hardware$vram_gb, " GB GPU (", x$hardware$total_vram_gb, " GB total) | ", x$hardware$ram_gb, " GB RAM"),
@@ -324,11 +350,9 @@ benchmark_local_runtime <- function(
     cli::cli_abort("{.arg schema} must be an `airgap_schema` object.", class = "airgap_validation_error")
   }
   pii_policy <- match.arg(pii_policy)
-  if (!is.numeric(n_sample) || length(n_sample) != 1L || is.na(n_sample) ||
-      n_sample < 1 || n_sample != floor(n_sample)) {
-    cli::cli_abort("{.arg n_sample} must be a positive integer.", class = "airgap_validation_error")
-  }
-  n_sample <- as.integer(n_sample)
+  n_sample <- assert_scalar_int(n_sample, "n_sample", min = 1L)
+  corpus_size <- assert_scalar_int(corpus_size, "corpus_size", min = 1L, allow_null = TRUE)
+  max_retries <- assert_scalar_int(max_retries, "max_retries", min = 0L)
 
   if (is.null(data)) {
     base_texts <- c(
@@ -343,7 +367,7 @@ benchmark_local_runtime <- function(
     )
     eff_text_col <- ".bench_text"
     eff_id_col <- ".bench_id"
-    eff_corpus <- if (is.null(corpus_size)) 1000L else as.integer(corpus_size)
+    eff_corpus <- if (is.null(corpus_size)) 1000L else corpus_size
   } else {
     if (!is.data.frame(data) || nrow(data) == 0L) {
       cli::cli_abort("{.arg data} must be a non-empty data frame.", class = "airgap_validation_error")
@@ -362,11 +386,7 @@ benchmark_local_runtime <- function(
     )
     eff_text_col <- ".bench_text"
     eff_id_col <- ".bench_id"
-    eff_corpus <- if (is.null(corpus_size)) as.integer(nrow(data)) else as.integer(corpus_size)
-  }
-
-  if (is.na(eff_corpus) || eff_corpus < 1L) {
-    cli::cli_abort("{.arg corpus_size} must be a positive integer.", class = "airgap_validation_error")
+    eff_corpus <- if (is.null(corpus_size)) as.integer(nrow(data)) else corpus_size
   }
 
   t0 <- proc.time()[["elapsed"]]

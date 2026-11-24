@@ -84,14 +84,17 @@ generate_irb_narrative <- function(
       cli::cli_abort(
         c(
           "Cannot generate IRB narrative from tampered or invalid audit log {.path {source}}.",
-          stats::setNames(ver$issues, rep("x", length(ver$issues)))
+          stats::setNames(escape_cli_braces(ver$issues), rep("x", length(ver$issues)))
         ),
         class = "airgap_audit_tamper_error"
       )
     }
     log_obj <- audit_log_read(source)
-    # Prefer the latest extraction_run entry; otherwise use the last entry
-    ext_entries <- Filter(function(e) identical(e$event_type, "extraction_run"), log_obj$entries)
+    # Prefer the latest extraction_run or consensus_extraction_run entry; otherwise use the last entry
+    ext_entries <- Filter(
+      function(e) e$event_type %in% c("extraction_run", "consensus_extraction_run"),
+      log_obj$entries
+    )
     manifest <- if (length(ext_entries) > 0L) ext_entries[[length(ext_entries)]] else log_obj$entries[[length(log_obj$entries)]]
     audit_chain_status <- paste0("VERIFIED (", ver$n_entries, " chained entries; zero tampering detected)")
     audit_chain_head <- ver$chain_head_hash
@@ -280,6 +283,7 @@ generate_irb_narrative <- function(
 
   if (!is.null(file)) {
     assert_scalar_string(file, "file")
+    assert_safe_write_target(file, arg = "file")
     dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
     writeLines(body_text, con = file, useBytes = TRUE)
   }

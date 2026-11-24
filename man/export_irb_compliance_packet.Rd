@@ -22,8 +22,8 @@ export_irb_compliance_packet(
 \item{out_dir}{Character scalar destination directory path for the
 compliance packet.}
 
-\item{extraction}{Optional \code{airgap_extraction} result from
-\code{\link[=airgap_extract]{airgap_extract()}}.}
+\item{extraction}{Optional \code{airgap_extraction} or \code{airgap_consensus} result
+from \code{\link[=airgap_extract]{airgap_extract()}} or \code{\link[=airgap_extract_consensus]{airgap_extract_consensus()}}.}
 
 \item{audit_log_path}{Optional path to an existing hash-chained JSONL audit
 log (verified via \code{\link[=audit_log_verify]{audit_log_verify()}} prior to inclusion).}

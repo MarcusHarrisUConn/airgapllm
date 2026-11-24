@@ -88,16 +88,10 @@ schema_field <- function(
       cli::cli_abort("{.arg min_length} and {.arg max_length} are only valid for `character` fields.", class = "airgap_validation_error")
     }
     if (!is.null(min_length)) {
-      if (!is.numeric(min_length) || length(min_length) != 1L || is.na(min_length) || min_length < 0 || min_length != floor(min_length)) {
-        cli::cli_abort("{.arg min_length} must be a non-negative integer.", class = "airgap_validation_error")
-      }
-      min_length <- as.integer(min_length)
+      min_length <- assert_scalar_int(min_length, "min_length", min = 0L)
     }
     if (!is.null(max_length)) {
-      if (!is.numeric(max_length) || length(max_length) != 1L || is.na(max_length) || max_length < 1 || max_length != floor(max_length)) {
-        cli::cli_abort("{.arg max_length} must be a positive integer.", class = "airgap_validation_error")
-      }
-      max_length <- as.integer(max_length)
+      max_length <- assert_scalar_int(max_length, "max_length", min = 1L)
     }
     if (!is.null(min_length) && !is.null(max_length) && min_length > max_length) {
       cli::cli_abort("{.arg min_length} cannot exceed {.arg max_length}.", class = "airgap_validation_error")
@@ -372,7 +366,11 @@ validate_extraction <- function(raw_output, schema) {
   if (isTRUE(schema$strict_keys)) {
     extra_keys <- setdiff(actual_keys, expected_keys)
     if (length(extra_keys) > 0L) {
-      errors <- c(errors, paste0("Unexpected extra field(s) not in schema: ", paste(extra_keys, collapse = ", "), "."))
+      # Never echo untrusted raw LLM key names into error messages (zero-PII checkpoint safety)
+      errors <- c(errors, paste0(
+        "Unexpected extra field(s) not in schema (count: ", length(extra_keys),
+        "; allowed fields: ", paste(expected_keys, collapse = ", "), ")."
+      ))
     }
   }
 
@@ -422,8 +420,9 @@ validate_extraction <- function(raw_output, schema) {
         next
       }
       if (!val %in% f$values) {
+        # Never echo untrusted raw LLM string values into error messages (zero-PII checkpoint safety)
         errors <- c(errors, paste0(
-          "Field '", nm, "' value '", val, "' is not in allowed enum values [",
+          "Field '", nm, "' value is not in allowed enum values [",
           paste(f$values, collapse = ", "), "]."
         ))
         next

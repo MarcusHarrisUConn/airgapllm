@@ -21,7 +21,7 @@ new_airgap_runtime <- function(
     cli::cli_abort(
       c(
         "Refusing to initialize runtime with non-local endpoint under air-gap policy.",
-        "x" = ep_info$reason,
+        "x" = "{ep_info$reason}",
         "i" = "Only loopback (`127.0.0.1`, `localhost`, `[::1]`), local Unix sockets (`unix:///...`), or `runtime_mock()` are allowed."
       ),
       class = "airgap_isolation_error"
@@ -251,11 +251,7 @@ runtime_mock <- function(
   }
   fail_rows <- as.character(fail_rows)
   if (!is.null(crash_after)) {
-    if (!is.numeric(crash_after) || length(crash_after) != 1L || is.na(crash_after) ||
-        crash_after < 1 || crash_after != floor(crash_after)) {
-      cli::cli_abort("{.arg crash_after} must be a positive integer or `NULL`.", class = "airgap_validation_error")
-    }
-    crash_after <- as.integer(crash_after)
+    crash_after <- assert_scalar_int(crash_after, "crash_after", min = 1L)
   }
 
   state <- new.env(parent = emptyenv())
@@ -294,11 +290,18 @@ deterministic_hash_int <- function(key_str) {
 
 #' Generate a deterministic schema-conformant named list for a row
 #' @noRd
-mock_generate_valid_row <- function(schema, seed, row_id) {
+mock_generate_valid_row <- function(schema, seed, row_id, prompt = NULL) {
+  prompt_sig <- ""
+  if (is.character(prompt) && length(prompt) == 1L && !is.na(prompt) && nzchar(prompt)) {
+    # Strip repair suffix and untrusted record body so signature reflects prompt template instructions only
+    base_p <- sub("\\n--- REPAIR INSTRUCTION ---[\\s\\S]*$", "", prompt, perl = TRUE)
+    base_p <- gsub("<UNTRUSTED_RESEARCH_RECORD>[\\s\\S]*?</UNTRUSTED_RESEARCH_RECORD>", "<RECORD>", base_p, perl = TRUE)
+    prompt_sig <- substr(sha256_string(base_p), 8L, 23L)
+  }
   out <- list()
   for (nm in names(schema$fields)) {
     f <- schema$fields[[nm]]
-    h_int <- deterministic_hash_int(paste(seed, row_id, nm, sep = "|"))
+    h_int <- deterministic_hash_int(paste(seed, row_id, nm, prompt_sig, sep = "|"))
 
     if (identical(f$type, "enum")) {
       idx <- (h_int %% length(f$values)) + 1L
@@ -384,7 +387,7 @@ invoke_runtime_mock <- function(runtime, prompt, schema, row_id, attempt = 1L) {
   }
 
   # Default deterministic schema-valid output
-  vals <- mock_generate_valid_row(schema = schema, seed = runtime$decoding_params$seed, row_id = rid)
+  vals <- mock_generate_valid_row(schema = schema, seed = runtime$decoding_params$seed, row_id = rid, prompt = prompt)
   as.character(jsonlite::toJSON(vals, auto_unbox = TRUE, null = "null"))
 }
 

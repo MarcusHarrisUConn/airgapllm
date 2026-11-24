@@ -95,9 +95,12 @@ test_that("apply_k_anonymity enforces k-anonymity & l-diversity under suppress_r
   expect_true(res_mask$risk_after$passes_l_diversity)
   expect_true("[SUPPRESSED]" %in% res_mask$data$site)
 
-  # Tiny dataset (< k_min rows total) under mask_rare masks all rows cleanly
+  # Tiny dataset (< k_min rows total) under mask_rare masks all rows cleanly and warns of non-compliance
   tiny <- df[1:3, ]
-  res_tiny <- apply_k_anonymity(tiny, c("site", "wave"), k_min = 5L, strategy = "mask_rare", mask_value = NA_character_)
+  expect_warning(
+    res_tiny <- apply_k_anonymity(tiny, c("site", "wave"), k_min = 5L, strategy = "mask_rare", mask_value = NA_character_),
+    class = "airgap_anonymity_warning"
+  )
   expect_equal(res_tiny$n_rows_masked, 3L)
   expect_true(all(is.na(res_tiny$data$site)))
 })
@@ -233,8 +236,12 @@ test_that("recommend_runtime_config and benchmark_local_runtime size and profile
   expect_equal(r_cpu$recommended$gpu_flag, "none")
   expect_equal(r_cpu$hardware$gpu_mode, "none")
 
-  # Ultra-constrained fallback & long-document chunking flag
-  r_tiny <- recommend_runtime_config(vram_gb = 2, ram_gb = 8, avg_tokens = 20000L)
+  # Ultra-constrained fallback & long-document chunking flag (warns of infeasible OOM risk)
+  expect_warning(
+    r_tiny <- recommend_runtime_config(vram_gb = 2, ram_gb = 8, avg_tokens = 20000L),
+    class = "airgap_hardware_warning"
+  )
+  expect_false(r_tiny$recommended$feasible)
   expect_true(r_tiny$recommended$chunking_recommended)
   expect_equal(r_tiny$recommended$params_b, 3)
 

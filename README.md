@@ -102,7 +102,7 @@ export_irb_compliance_packet(
 ## Documentation & Guides
 
 - **Website & Reference:** <https://marcusharrisphd.com/airgapllm/>
-- **Security Audit:** See [SECURITY.md](SECURITY.md) for the v0.2.0 adversarial red-team audit, SSRF/injection mitigations, and cryptographic vault specification.
+- **Security Audits:** See [SECURITY.md](SECURITY.md) for the v0.2.0 and v0.5.0 adversarial red-team audits, SSRF/injection/symlink mitigations, zero-PII packet verification, and cryptographic vault specification.
 - **Architecture:** See [ARCHITECTURE.md](ARCHITECTURE.md) for the formal threat & privacy model, container hardening specification, and cryptographic audit log schema.
 - **Vignettes:**
   - `vignette("getting-started", package = "airgapllm")`

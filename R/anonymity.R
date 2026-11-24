@@ -15,11 +15,16 @@ build_equivalence_keys <- function(data, quasi_ids, include_na = TRUE) {
     na_j <- is.na(v)
     has_na <- has_na | na_j
     s <- as.character(v)
-    s[na_j] <- "<NA>"
-    cols_chr[[j]] <- s
+    enc <- character(n)
+    enc[na_j] <- "N:"
+    non_na <- !na_j
+    if (any(non_na)) {
+      enc[non_na] <- paste0("V", nchar(s[non_na], type = "bytes"), ":", s[non_na])
+    }
+    cols_chr[[j]] <- enc
   }
 
-  keys <- do.call(paste, c(cols_chr, list(sep = "\x1f")))
+  keys <- do.call(paste, c(cols_chr, list(sep = "|")))
   if (!isTRUE(include_na)) {
     keys[has_na] <- NA_character_
     return(list(keys = keys, excluded = has_na))
@@ -104,10 +109,7 @@ assess_reidentification_risk <- function(
     )
   }
 
-  if (!is.numeric(k_min) || length(k_min) != 1L || is.na(k_min) || k_min < 2 || k_min != floor(k_min)) {
-    cli::cli_abort("{.arg k_min} must be an integer >= 2.", class = "airgap_validation_error")
-  }
-  k_min <- as.integer(k_min)
+  k_min <- assert_scalar_int(k_min, "k_min", min = 2L)
 
   if (!is.null(sensitive_col)) {
     assert_scalar_string(sensitive_col, "sensitive_col")
@@ -117,10 +119,7 @@ assess_reidentification_risk <- function(
     if (sensitive_col %in% quasi_ids) {
       cli::cli_abort("{.arg sensitive_col} must not overlap with {.arg quasi_ids}.", class = "airgap_validation_error")
     }
-    if (!is.numeric(l_min) || length(l_min) != 1L || is.na(l_min) || l_min < 2 || l_min != floor(l_min)) {
-      cli::cli_abort("{.arg l_min} must be an integer >= 2.", class = "airgap_validation_error")
-    }
-    l_min <- as.integer(l_min)
+    l_min <- assert_scalar_int(l_min, "l_min", min = 2L)
   } else {
     l_min <- NA_integer_
   }
@@ -148,6 +147,8 @@ assess_reidentification_risk <- function(
       l_distinct = integer(),
       l_violation = logical()
     )
+    # Genuinely empty 0-row table passes; non-empty table with all rows excluded due to NA QIs MUST FAIL
+    all_excl_fail <- n_total > 0L
     return(structure(
       list(
         n_rows = as.integer(n_total),
@@ -161,24 +162,24 @@ assess_reidentification_risk <- function(
         n_unique_rows = 0L,
         pct_unique_rows = 0,
         n_violating_classes = 0L,
-        n_violating_rows = 0L,
-        pct_violating_rows = 0,
-        passes_k_anonymity = TRUE,
-        prosecutor_risk_max = 0,
-        prosecutor_risk_mean = 0,
-        journalist_risk_max = 0,
-        journalist_risk_mean = 0,
+        n_violating_rows = if (all_excl_fail) as.integer(n_total) else 0L,
+        pct_violating_rows = if (all_excl_fail) 100 else 0,
+        passes_k_anonymity = !all_excl_fail,
+        prosecutor_risk_max = if (all_excl_fail) 1 else 0,
+        prosecutor_risk_mean = if (all_excl_fail) 1 else 0,
+        journalist_risk_max = if (all_excl_fail) sampling_fraction else 0,
+        journalist_risk_mean = if (all_excl_fail) sampling_fraction else 0,
         sampling_fraction = sampling_fraction,
         sensitive_col = sensitive_col,
         l_min = l_min,
         min_l = NA_integer_,
         n_l_violating_classes = 0L,
-        n_l_violating_rows = 0L,
-        pct_l_violating_rows = 0,
-        passes_l_diversity = if (is.null(sensitive_col)) NA else TRUE,
+        n_l_violating_rows = if (all_excl_fail && !is.null(sensitive_col)) as.integer(n_total) else 0L,
+        pct_l_violating_rows = if (all_excl_fail && !is.null(sensitive_col)) 100 else 0,
+        passes_l_diversity = if (is.null(sensitive_col)) NA else !all_excl_fail,
         equivalence_classes = empty_tbl,
         row_class_size = rep(NA_integer_, n_total),
-        row_violates = rep(FALSE, n_total),
+        row_violates = rep(all_excl_fail, n_total),
         assessed_at = utc_timestamp()
       ),
       class = "airgap_reid_risk"
@@ -228,6 +229,11 @@ assess_reidentification_risk <- function(
 
   row_viol_all <- rep(FALSE, n_total)
   row_viol_all[eval_idx] <- row_k_viol_eval | row_l_viol_eval
+  # Conservatively treat excluded NA-QI rows (include_na = FALSE) as unverified/violating
+  # so unique non-NA quasi-identifiers on partially-NA rows cannot escape suppression/masking.
+  if (n_excl > 0L) {
+    row_viol_all[eq$excluded] <- TRUE
+  }
 
   ord_cls <- order(cls_sizes, seq_along(cls_sizes))
   eq_tbl <- tibble::tibble(
@@ -258,7 +264,7 @@ assess_reidentification_risk <- function(
       n_violating_classes = as.integer(sum(cls_k_viol)),
       n_violating_rows = as.integer(n_viol_rows),
       pct_violating_rows = round(100 * n_viol_rows / n_eval, 2),
-      passes_k_anonymity = n_viol_rows == 0L,
+      passes_k_anonymity = (n_viol_rows == 0L) && (n_excl == 0L),
       prosecutor_risk_max = round(max(cls_pros_risk), 4),
       prosecutor_risk_mean = round(mean(1 / row_k_eval), 4),
       journalist_risk_max = round(max(cls_jour_risk), 4),
@@ -270,7 +276,7 @@ assess_reidentification_risk <- function(
       n_l_violating_classes = as.integer(n_l_viol_cls),
       n_l_violating_rows = as.integer(n_l_viol_rows),
       pct_l_violating_rows = pct_l_viol_rows,
-      passes_l_diversity = passes_l,
+      passes_l_diversity = if (is.null(sensitive_col)) NA else (isTRUE(passes_l) && n_excl == 0L),
       equivalence_classes = eq_tbl,
       row_class_size = row_k_all,
       row_violates = row_viol_all,
@@ -357,9 +363,19 @@ apply_k_anonymity <- function(
   include_na = TRUE
 ) {
   strategy <- match.arg(strategy)
+  assert_scalar_logical(include_na, "include_na")
+  if (length(mask_value) != 1L || (!is.character(mask_value) && !is.logical(mask_value))) {
+    cli::cli_abort("{.arg mask_value} must be a non-empty character scalar or `NA_character_`.", class = "airgap_validation_error")
+  }
   if (!is.na(mask_value)) {
     assert_scalar_string(mask_value, "mask_value")
   } else {
+    if (!isTRUE(include_na)) {
+      cli::cli_abort(
+        "{.arg mask_value} cannot be `NA` when `include_na = FALSE` because masked rows would be excluded from post-mask k-anonymity evaluation.",
+        class = "airgap_validation_error"
+      )
+    }
     mask_value <- NA_character_
   }
 
@@ -406,7 +422,7 @@ apply_k_anonymity <- function(
           rem_keys <- eq$keys[rem_idx]
           tbl_rem <- table(rem_keys)
           smallest_key <- names(tbl_rem)[which.min(tbl_rem)]
-          masked_rows[eq$keys == smallest_key] <- TRUE
+          masked_rows[which(eq$keys == smallest_key)] <- TRUE
         }
       } else {
         masked_rows <- rep(TRUE, nrow(safe_df))
@@ -428,6 +444,18 @@ apply_k_anonymity <- function(
     l_min = l_min,
     include_na = include_na
   )
+
+  if (!isTRUE(risk_after$passes_k_anonymity) ||
+      (!is.null(sensitive_col) && !isTRUE(risk_after$passes_l_diversity))) {
+    cli::cli_warn(
+      c(
+        "De-identified table still does not satisfy target anonymity thresholds after `strategy = '{strategy}'`.",
+        "i" = "Post-anonymization status: k-anonymity (k >= {k_min}) = {risk_after$passes_k_anonymity}{if (!is.null(sensitive_col)) paste0(', l-diversity (l >= ', l_min, ') = ', risk_after$passes_l_diversity) else ''}.",
+        "i" = "Consider `strategy = 'suppress_rows'`, coarser quasi-identifier generalization, or larger cohort size."
+      ),
+      class = "airgap_anonymity_warning"
+    )
+  }
 
   structure(
     list(

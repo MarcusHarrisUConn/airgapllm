@@ -21,7 +21,7 @@ default_prompt_template <- function(schema) {
 #' Neutralize boundary tag breakout attempts inside untrusted text before prompt rendering
 #' @noRd
 neutralize_prompt_delimiters <- function(text) {
-  gsub("</?UNTRUSTED_RESEARCH_RECORD>", "[ESCAPED_RECORD_TAG]", text, ignore.case = TRUE, perl = TRUE)
+  gsub("</?\\s*UNTRUSTED_RESEARCH_RECORD\\b[^>]*>", "[ESCAPED_RECORD_TAG]", text, ignore.case = TRUE, perl = TRUE)
 }
 
 #' Render prompt template with delimited sanitized text
@@ -53,10 +53,23 @@ sanitize_checkpoint_error <- function(err_msg, pii_cfg) {
 
 #' Scan extracted character fields post-inference for leaked or prompt-injected PII
 #' @noRd
-scan_and_handle_output_pii <- function(data_list, schema, pii_cfg, pii_policy, action, row_id) {
+scan_and_handle_output_pii <- function(
+  data_list,
+  schema,
+  pii_cfg,
+  pii_policy,
+  action,
+  row_id,
+  allowed_tokens = NULL
+) {
   if (is.null(data_list) || identical(action, "none")) {
     return(list(data = data_list, leak_count = 0L))
   }
+
+  tok_pat <- "<<[A-Z0-9_]+_[0-9a-f]{8,32}>>"
+  has_token_allowlist <- identical(pii_policy, "pseudonymize") ||
+    (!is.null(allowed_tokens) && length(allowed_tokens) > 0L)
+  allowed_set <- if (!is.null(allowed_tokens)) as.character(allowed_tokens) else character()
 
   leak_total <- 0L
   leaked_fields <- character()
@@ -69,41 +82,94 @@ scan_and_handle_output_pii <- function(data_list, schema, pii_cfg, pii_policy, a
     val <- out_data[[nm]]
     if (is.null(val) || !is.character(val) || length(val) != 1L || is.na(val) || !nzchar(val)) next
 
-    # Temporarily mask legitimate <<TYPE_HASH>> pseudonym tokens so only raw PII leaks trigger
-    scan_str <- if (identical(pii_policy, "pseudonymize")) {
-      gsub("<<[A-Z0-9_]+_[0-9a-f]{8,32}>>", "", val, perl = TRUE)
+    # Locate all <<TYPE_HASH>> spans once and separate genuine vault tokens from forged tokens
+    m <- gregexpr(tok_pat, val, perl = TRUE)[[1L]]
+    has_toks <- !(length(m) == 1L && m[1L] == -1L)
+    forged_count <- 0L
+    nonce <- paste(as.character(openssl::rand_bytes(8L)), collapse = "")
+    genuine_map <- list()
+
+    if (has_toks) {
+      starts <- as.integer(m)
+      lens <- as.integer(attr(m, "match.length"))
+      total_n <- nchar(val, type = "chars")
+      scan_pieces <- character()
+      work_pieces <- character()
+      pos <- 1L
+      gen_idx <- 0L
+
+      for (k in seq_along(starts)) {
+        st <- starts[k]
+        en <- st + lens[k] - 1L
+        if (st > pos) {
+          seg <- substr(val, pos, st - 1L)
+          scan_pieces <- c(scan_pieces, seg)
+          work_pieces <- c(work_pieces, seg)
+        }
+        tok <- substr(val, st, en)
+        if (has_token_allowlist && (tok %in% allowed_set)) {
+          # Genuine vault token: replace with unguessable random nonce placeholder during PII scan
+          gen_idx <- gen_idx + 1L
+          sentinel <- sprintf("__AGVTOK_%s_%04d__", nonce, gen_idx)
+          genuine_map[[sentinel]] <- tok
+          scan_pieces <- c(scan_pieces, " ")
+          work_pieces <- c(work_pieces, sentinel)
+        } else if (has_token_allowlist) {
+          # Unrecognized <<TYPE_HEX>> token under pseudonymization: forged exfiltration channel!
+          forged_count <- forged_count + 1L
+          scan_pieces <- c(scan_pieces, " ")
+          work_pieces <- c(work_pieces, "[REDACTED_FORGED_TOKEN]")
+        } else {
+          scan_pieces <- c(scan_pieces, tok)
+          work_pieces <- c(work_pieces, tok)
+        }
+        pos <- en + 1L
+      }
+      if (pos <= total_n) {
+        tail_seg <- substr(val, pos, total_n)
+        scan_pieces <- c(scan_pieces, tail_seg)
+        work_pieces <- c(work_pieces, tail_seg)
+      }
+      scan_str <- paste0(scan_pieces, collapse = "")
+      work_str <- paste0(work_pieces, collapse = "")
     } else {
-      val
+      scan_str <- val
+      work_str <- val
     }
 
     det <- pii_detect(scan_str, config = pii_cfg, include_values = FALSE)
-    if (nrow(det) > 0L) {
-      leak_total <- leak_total + nrow(det)
+    field_leaks <- nrow(det) + forged_count
+    if (field_leaks > 0L) {
+      leak_total <- leak_total + field_leaks
       leaked_fields <- c(leaked_fields, nm)
-      leaked_types <- union(leaked_types, unique(det$entity_type))
+      if (nrow(det) > 0L) leaked_types <- union(leaked_types, unique(det$entity_type))
+      if (forged_count > 0L) leaked_types <- union(leaked_types, "forged_pseudonym_token")
 
       if (identical(action, "redact")) {
-        if (identical(pii_policy, "pseudonymize")) {
-          # Preserve <<TYPE_HASH>> tokens while redacting any raw PII around them
-          tok_m <- gregexpr("<<[A-Z0-9_]+_[0-9a-f]{8,32}>>", val, perl = TRUE)
-          toks <- regmatches(val, tok_m)[[1L]]
-          if (length(toks) > 0L) {
-            placeholders <- sprintf("{AIRGAPTOK:%04d}", seq_along(toks))
-            masked <- val
-            for (k in seq_along(toks)) {
-              masked <- sub(toks[k], placeholders[k], masked, fixed = TRUE)
+        redacted <- as.character(pii_redact(work_str, config = pii_cfg))[1L]
+        if (length(genuine_map) > 0L) {
+          # Single-pass restoration of random nonce sentinels (zero collision risk)
+          sent_pat <- paste0("__AGVTOK_", nonce, "_[0-9]{4}__")
+          sm <- gregexpr(sent_pat, redacted, perl = TRUE)[[1L]]
+          if (!(length(sm) == 1L && sm[1L] == -1L)) {
+            s_starts <- as.integer(sm)
+            s_lens <- as.integer(attr(sm, "match.length"))
+            r_n <- nchar(redacted, type = "chars")
+            r_pieces <- character()
+            r_pos <- 1L
+            for (k in seq_along(s_starts)) {
+              st <- s_starts[k]
+              en <- st + s_lens[k] - 1L
+              if (st > r_pos) r_pieces <- c(r_pieces, substr(redacted, r_pos, st - 1L))
+              key_s <- substr(redacted, st, en)
+              r_pieces <- c(r_pieces, genuine_map[[key_s]] %||% key_s)
+              r_pos <- en + 1L
             }
-            redacted <- as.character(pii_redact(masked, config = pii_cfg))[1L]
-            for (k in seq_along(toks)) {
-              redacted <- sub(placeholders[k], toks[k], redacted, fixed = TRUE)
-            }
-            out_data[[nm]] <- redacted
-          } else {
-            out_data[[nm]] <- as.character(pii_redact(val, config = pii_cfg))[1L]
+            if (r_pos <= r_n) r_pieces <- c(r_pieces, substr(redacted, r_pos, r_n))
+            redacted <- paste0(r_pieces, collapse = "")
           }
-        } else {
-          out_data[[nm]] <- as.character(pii_redact(val, config = pii_cfg))[1L]
         }
+        out_data[[nm]] <- redacted
       }
     }
   }
@@ -133,6 +199,7 @@ scan_and_handle_output_pii <- function(data_list, schema, pii_cfg, pii_policy, a
 #' Append a single JSON line atomically to a JSONL file
 #' @noRd
 jsonl_append_line <- function(path, obj) {
+  assert_safe_write_target(path, arg = "path")
   line <- canonical_json(obj)
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   con <- file(path, open = "ab")
@@ -196,6 +263,15 @@ checkpoint_load <- function(path, schema_digest, prompt_template_hash, pii_polic
     cli::cli_abort(
       c(
         "Checkpoint PII policy mismatch (checkpoint: '{header$pii_policy}', current: '{pii_policy}').",
+        "i" = "Start a new `checkpoint_path` or pass `resume = FALSE` to overwrite."
+      ),
+      class = "airgap_checkpoint_error"
+    )
+  }
+  if (!identical(as.character(header$model %||% ""), as.character(model %||% ""))) {
+    cli::cli_abort(
+      c(
+        "Checkpoint model mismatch: cannot resume a checkpoint generated by model {.val {header$model}} using model {.val {model}}.",
         "i" = "Start a new `checkpoint_path` or pass `resume = FALSE` to overwrite."
       ),
       class = "airgap_checkpoint_error"
@@ -446,11 +522,7 @@ airgap_extract <- function(
   if (!inherits(pii_config, "airgap_pii_config")) {
     cli::cli_abort("{.arg pii_config} must be an `airgap_pii_config` object.", class = "airgap_validation_error")
   }
-  if (!is.numeric(max_retries) || length(max_retries) != 1L || is.na(max_retries) ||
-      max_retries < 0 || max_retries != floor(max_retries)) {
-    cli::cli_abort("{.arg max_retries} must be a non-negative integer.", class = "airgap_validation_error")
-  }
-  max_retries <- as.integer(max_retries)
+  max_retries <- assert_scalar_int(max_retries, "max_retries", min = 0L)
   assert_scalar_logical(resume, "resume")
   assert_scalar_logical(retry_failed, "retry_failed")
   assert_scalar_logical(reidentify_output, "reidentify_output")
@@ -464,6 +536,9 @@ airgap_extract <- function(
   } else {
     output_pii_action
   }
+
+  # Internal token allowlist passed by airgap_extract_consensus() when preserving pseudonymized tokens
+  inherited_tokens <- attr(data, ".airgap_preserve_tokens", exact = TRUE)
 
   if (is.null(id_col)) {
     id_col_name <- ".row_id"
@@ -482,6 +557,12 @@ airgap_extract <- function(
       cli::cli_abort("{.arg id_col} values must be unique for deterministic checkpointing.", class = "airgap_validation_error")
     }
   }
+  if (id_col_name %in% names(schema$fields)) {
+    cli::cli_abort(
+      "Schema field name {.val {id_col_name}} collides with {.arg id_col}; rename the field or {.arg id_col}.",
+      class = "airgap_validation_error"
+    )
+  }
 
   # 1. Pre-flight isolation check BEFORE touching any sensitive text
   eff_spec <- container_spec %||% runtime$container_spec
@@ -496,9 +577,22 @@ airgap_extract <- function(
     error_on_fail = TRUE
   )
 
-  # 2. Prompt template setup & hash
+  # 2. Prompt template setup, pre-inference PII gate & hash
   template <- prompt_template %||% default_prompt_template(schema)
   assert_scalar_string(template, "prompt_template")
+  if (!is.null(prompt_template) && !identical(pii_policy, "verified_deidentified")) {
+    tpl_det <- pii_detect(template, config = pii_config, include_values = FALSE)
+    if (nrow(tpl_det) > 0L) {
+      types_str <- paste(sort(unique(tpl_det$entity_type)), collapse = ", ")
+      cli::cli_abort(
+        c(
+          "Pre-inference privacy violation: {.arg prompt_template} contains raw PII ({types_str}).",
+          "i" = "Never embed raw participant text inside `prompt_template`; supply a `{{text}}` placeholder and pass raw text via `data[[text_col]]`."
+        ),
+        class = "airgap_privacy_error"
+      )
+    }
+  }
   prompt_template_hash <- sha256_string(template)
   run_id <- run_id %||% generate_run_id("run")
 
@@ -553,10 +647,28 @@ airgap_extract <- function(
     )
   }
 
+  # Guard against pre-rendered templates missing {text} that embed unsanitized input rows verbatim
+  if (!is.null(prompt_template) && !identical(pii_policy, "verified_deidentified") &&
+      !grepl("{text}", template, fixed = TRUE)) {
+    changed_idx <- which(!is.na(raw_texts) & !is.na(sanitized_texts) & raw_texts != sanitized_texts)
+    for (ci in changed_idx) {
+      if (nzchar(trimws(raw_texts[ci])) && grepl(raw_texts[ci], template, fixed = TRUE)) {
+        cli::cli_abort(
+          c(
+            "Pre-inference privacy violation: {.arg prompt_template} embeds unsanitized input text without a `{{text}}` placeholder.",
+            "i" = "Pass a PII-free template with `{{text}}` so pre-inference redaction/pseudonymization applies."
+          ),
+          class = "airgap_privacy_error"
+        )
+      }
+    }
+  }
+
   # 4. Initialize or Resume Atomic JSONL Checkpoint Ledger
   records <- list()
   if (!is.null(checkpoint_path)) {
     assert_scalar_string(checkpoint_path, "checkpoint_path")
+    assert_safe_write_target(checkpoint_path, arg = "checkpoint_path")
     need_header <- TRUE
     if (isTRUE(resume) && file.exists(checkpoint_path)) {
       ck <- checkpoint_load(
@@ -588,10 +700,24 @@ airgap_extract <- function(
     }
   }
 
-  # Determine which rows are already completed in checkpoint
-  is_resumed <- vapply(row_ids, function(rid) {
+  # Determine which rows are already completed in checkpoint (strictly verifying input_sha256!)
+  expected_input_shas <- vapply(sanitized_texts, function(st) {
+    if (is.na(st) || !nzchar(trimws(st))) sha256_string("") else sha256_string(st)
+  }, character(1L), USE.NAMES = FALSE)
+
+  is_resumed <- vapply(seq_along(row_ids), function(idx) {
+    rid <- row_ids[idx]
     rec <- records[[rid]]
     if (is.null(rec)) return(FALSE)
+    if (!is.null(rec$input_sha256) && !constant_time_equal(as.character(rec$input_sha256), expected_input_shas[idx])) {
+      cli::cli_abort(
+        c(
+          "Checkpoint input drift detected for row {.val {rid}}: sanitized input SHA-256 does not match committed checkpoint.",
+          "i" = "Start a new `checkpoint_path` or pass `resume = FALSE` to reprocess modified inputs."
+        ),
+        class = "airgap_checkpoint_error"
+      )
+    }
     if (identical(rec$status, "ok")) return(TRUE)
     !isTRUE(retry_failed)
   }, logical(1L))
@@ -651,13 +777,21 @@ airgap_extract <- function(
       )
       val <- validate_extraction(raw_out, schema)
       if (isTRUE(val$valid)) {
+        eff_allowed_tokens <- if (!is.null(active_vault)) {
+          names(active_vault$mappings)
+        } else if (!is.null(inherited_tokens)) {
+          as.character(inherited_tokens)
+        } else {
+          NULL
+        }
         leak_res <- scan_and_handle_output_pii(
           data_list = val$data,
           schema = schema,
           pii_cfg = pii_config,
           pii_policy = pii_policy,
           action = eff_output_pii_action,
-          row_id = rid
+          row_id = rid,
+          allowed_tokens = eff_allowed_tokens
         )
         output_pii_leaks_total <- output_pii_leaks_total + leak_res$leak_count
         final_status <- "ok"

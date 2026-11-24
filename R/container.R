@@ -270,6 +270,7 @@ build_container_env <- function(spec) {
   }
   if (length(spec$env) > 0L) {
     for (nm in names(spec$env)) {
+      assert_safe_env_entry(nm, as.character(spec$env[[nm]])[1L])
       base_env[[nm]] <- as.character(spec$env[[nm]])[1L]
     }
   }
@@ -435,6 +436,7 @@ emit_docker_run <- function(
   cmd <- paste(c("docker", quoted), collapse = " ")
 
   if (!is.null(file)) {
+    assert_safe_write_target(file, arg = "file")
     script <- paste(
       "#!/usr/bin/env bash",
       "set -euo pipefail",
@@ -563,6 +565,7 @@ emit_docker_compose <- function(
   yaml_str <- paste0(header, yaml::as.yaml(compose, indent.mapping.sequence = TRUE))
 
   if (!is.null(file)) {
+    assert_safe_write_target(file, arg = "file")
     writeLines(yaml_str, con = file, useBytes = TRUE)
   }
 
@@ -666,6 +669,7 @@ emit_apptainer_def <- function(spec, file = NULL, require_pinned = TRUE) {
   )
 
   if (!is.null(file)) {
+    assert_safe_write_target(file, arg = "file")
     writeLines(def_text, con = file, useBytes = TRUE)
   }
 
@@ -750,13 +754,13 @@ verify_model_digest <- function(
       matched = matched
     )
   } else {
-    # Inspect all directory entries (including symlinked dirs/files) before hashing
-    raw_entries <- sort(list.files(norm_path, recursive = TRUE, all.files = FALSE, include.dirs = TRUE))
+    # Inspect ALL directory entries including hidden dotfiles and hidden symlinks before hashing
+    raw_entries <- sort(list.files(norm_path, recursive = TRUE, all.files = TRUE, no.. = TRUE, include.dirs = TRUE))
     for (ent in raw_entries) {
       assert_path_confined(file.path(norm_path, ent), root_dir = norm_path, allow_symlinks = allow_symlinks)
     }
 
-    rel_files <- sort(list.files(norm_path, recursive = TRUE, all.files = FALSE, include.dirs = FALSE))
+    rel_files <- sort(list.files(norm_path, recursive = TRUE, all.files = TRUE, no.. = TRUE, include.dirs = FALSE))
     if (length(rel_files) == 0L) {
       cli::cli_abort("Model directory contains no files: {.path {path}}.", class = "airgap_digest_error")
     }
@@ -1043,13 +1047,33 @@ preflight_isolation_check <- function(
         paste0("Non-loopback host_bind rejected: '", spec$host_bind, "'.")
       }
     )
+
+    # Container environment isolation (no overrides of offline flags, OLLAMA_HOST, or *_PROXY)
+    bad_env_names <- if (length(spec$env) > 0L && !is.null(names(spec$env))) {
+      names(spec$env)[vapply(names(spec$env), is_forbidden_container_env, logical(1L))]
+    } else {
+      character()
+    }
+    env_ok <- length(bad_env_names) == 0L
+    add_check(
+      "container_env_isolation",
+      if (env_ok) "pass" else "fail",
+      "required",
+      if (env_ok) {
+        "Container environment preserves mandatory offline/loopback flags with no proxy overrides."
+      } else {
+        paste0("Disallowed container env override(s) detected: ", paste(bad_env_names, collapse = ", "), ".")
+      }
+    )
   }
 
   # 2. Endpoint loopback / local-only check
+  endpoint_host <- NULL
   if (!is.null(endpoint)) {
     endpoint_str <- if (inherits(endpoint, "airgap_runtime")) endpoint$endpoint else as.character(endpoint)[1L]
     ep_info <- classify_endpoint(endpoint)
     endpoint_class <- ep_info$endpoint_class
+    endpoint_host <- ep_info$host
     add_check(
       "endpoint_loopback_only",
       if (isTRUE(ep_info$allowed)) "pass" else "fail",
@@ -1121,7 +1145,7 @@ preflight_isolation_check <- function(
 
   # 4. Outbound proxy environment variable audit (case-insensitive; fails closed when strict_proxy = TRUE)
   if (isTRUE(check_proxies)) {
-    prox <- detect_outbound_proxies()
+    prox <- detect_outbound_proxies(endpoint_host = endpoint_host)
     if (length(prox$active_vars) == 0L) {
       add_check("env_proxy_isolation", "pass", "required", "No outbound proxy environment variables detected.")
     } else if (isTRUE(prox$has_local_bypass)) {
@@ -1129,16 +1153,17 @@ preflight_isolation_check <- function(
         "env_proxy_isolation",
         "pass",
         "required",
-        paste0("Proxy variables set (", paste(prox$active_vars, collapse = ", "), "), with 127.0.0.1 and localhost explicitly in NO_PROXY; HTTP runtimes also force noproxy='*'.")
+        paste0("Proxy variables set (", paste(prox$active_vars, collapse = ", "), "), with required loopback host(s) explicitly in NO_PROXY; HTTP runtimes also force noproxy='*'.")
       )
     } else {
+      req_hosts <- if (isTRUE(prox$needs_ipv6)) "127.0.0.1, localhost, and ::1" else "127.0.0.1 and localhost"
       add_check(
         "env_proxy_isolation",
         if (isTRUE(strict_proxy)) "fail" else "warn",
         if (isTRUE(strict_proxy)) "required" else "advisory",
         paste0(
           "Outbound proxy variable(s) active (", paste(prox$active_vars, collapse = ", "),
-          ") without explicit 127.0.0.1 and localhost bypass in NO_PROXY."
+          ") without explicit ", req_hosts, " bypass in NO_PROXY."
         )
       )
     }
@@ -1191,7 +1216,7 @@ preflight_isolation_check <- function(
   if (isTRUE(error_on_fail) && !passed) {
     failed_rows <- checks_tbl[checks_tbl$severity == "required" & checks_tbl$status == "fail", , drop = FALSE]
     bullets <- stats::setNames(
-      paste0(failed_rows$check_id, ": ", failed_rows$detail),
+      escape_cli_braces(paste0(failed_rows$check_id, ": ", failed_rows$detail)),
       rep("x", nrow(failed_rows))
     )
     cli::cli_abort(

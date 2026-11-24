@@ -186,9 +186,10 @@ normalize_audit_entry <- function(entry, event_type = "extraction_run", metadata
     }
     for (nm in names(pii_counts)) {
       v <- pii_counts[[nm]]
-      if (!is.numeric(v) || is.logical(v) || length(v) != 1L || is.na(v) || v < 0 || v != floor(v)) {
+      if (!is.numeric(v) || is.logical(v) || length(v) != 1L || is.na(v) ||
+          !is.finite(v) || v < 0 || v != floor(v) || abs(v) > .Machine$integer.max) {
         cli::cli_abort(
-          "Audit privacy violation: `pii_counts[['{nm}']]` must be a non-negative integer count.",
+          "Audit privacy violation: `pii_counts[['{nm}']]` must be a finite non-negative integer count.",
           class = "airgap_audit_privacy_error"
         )
       }
@@ -200,13 +201,48 @@ normalize_audit_entry <- function(entry, event_type = "extraction_run", metadata
   out_leaks <- entry$output_pii_leaks
   if (!is.null(out_leaks)) {
     if (!is.numeric(out_leaks) || is.logical(out_leaks) || length(out_leaks) != 1L ||
-        is.na(out_leaks) || out_leaks < 0 || out_leaks != floor(out_leaks)) {
-      cli::cli_abort("Audit privacy violation: `output_pii_leaks` must be a non-negative integer.", class = "airgap_audit_privacy_error")
+        is.na(out_leaks) || !is.finite(out_leaks) || out_leaks < 0 ||
+        out_leaks != floor(out_leaks) || abs(out_leaks) > .Machine$integer.max) {
+      cli::cli_abort("Audit privacy violation: `output_pii_leaks` must be a finite non-negative integer.", class = "airgap_audit_privacy_error")
     }
     out_leaks <- as.integer(out_leaks)
   }
 
-  # 4. Scan metadata & scalar identifiers for accidental PII
+  # Validate row_counts contains strictly finite non-negative integers (never raw text/PII)
+  row_counts <- entry$row_counts
+  if (!is.null(row_counts)) {
+    if (!is.list(row_counts)) {
+      cli::cli_abort("{.field row_counts} must be a named list of non-negative integers.", class = "airgap_audit_privacy_error")
+    }
+    if (length(row_counts) > 0L) {
+      if (is.null(names(row_counts)) || any(!nzchar(names(row_counts)))) {
+        cli::cli_abort("{.field row_counts} must have non-empty field names.", class = "airgap_audit_privacy_error")
+      }
+      for (nm in names(row_counts)) {
+        v <- row_counts[[nm]]
+        if (!is.numeric(v) || is.logical(v) || length(v) != 1L || is.na(v) ||
+            !is.finite(v) || v < 0 || v != floor(v) || abs(v) > .Machine$integer.max) {
+          cli::cli_abort(
+            "Audit privacy violation: `row_counts[['{nm}']]` must be a finite non-negative integer.",
+            class = "airgap_audit_privacy_error"
+          )
+        }
+        row_counts[[nm]] <- as.integer(v)
+      }
+    }
+  }
+
+  # Validate timestamp format if explicitly supplied
+  ts_val <- entry$timestamp %||% utc_timestamp()
+  if (!is.character(ts_val) || length(ts_val) != 1L || is.na(ts_val) ||
+      !grepl("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$", ts_val, perl = TRUE)) {
+    cli::cli_abort(
+      "Audit log schema violation: {.field timestamp} must be an ISO-8601 UTC timestamp.",
+      class = "airgap_audit_privacy_error"
+    )
+  }
+
+  # 4. Recursively scan metadata, decoding_params, and ALL string-bearing audit fields for PII
   eff_meta <- metadata %||% entry$metadata
   if (!is.null(eff_meta)) {
     if (!is.list(eff_meta)) {
@@ -217,32 +253,68 @@ normalize_audit_entry <- function(entry, event_type = "extraction_run", metadata
       cli::cli_abort(
         c(
           "Audit log privacy violation: potential PII or raw text detected in audit metadata.",
-          stats::setNames(pii_issues, rep("x", length(pii_issues)))
+          stats::setNames(escape_cli_braces(pii_issues), rep("x", length(pii_issues)))
         ),
         class = "airgap_audit_privacy_error"
       )
     }
   }
 
-  # Also verify core string identifiers do not contain obvious PII (emails/SSNs/phones)
-  id_cfg <- pii_config(entities = c("email", "ssn", "phone", "street_address"), detect_unlabeled_names = FALSE)
-  for (fld in c("run_id", "event_type", "model_name")) {
+  if (!is.null(entry$decoding_params)) {
+    if (!is.list(entry$decoding_params)) {
+      cli::cli_abort("{.field decoding_params} must be a named list or `NULL`.", class = "airgap_audit_privacy_error")
+    }
+    dec_issues <- scan_metadata_for_pii(entry$decoding_params, "decoding_params")
+    if (length(dec_issues) > 0L) {
+      cli::cli_abort(
+        c(
+          "Audit log privacy violation: potential PII or raw text detected in `decoding_params`.",
+          stats::setNames(escape_cli_braces(dec_issues), rep("x", length(dec_issues)))
+        ),
+        class = "airgap_audit_privacy_error"
+      )
+    }
+  }
+
+  # Scan all scalar string fields across the audit entry with full built-in PII entity coverage
+  eff_event_type <- as.character(entry$event_type %||% event_type)[1L]
+  ev_issues <- scan_metadata_for_pii(eff_event_type, "event_type")
+  if (length(ev_issues) > 0L) {
+    cli::cli_abort(
+      c(
+        "Audit log privacy violation: field {.field event_type} contains potential PII or oversized text.",
+        stats::setNames(escape_cli_braces(ev_issues), rep("x", length(ev_issues)))
+      ),
+      class = "airgap_audit_privacy_error"
+    )
+  }
+
+  all_scalar_fields <- c(
+    "run_id", "model_name", "container_backend", "network_mode",
+    "endpoint_class", "isolation_status", "pii_policy", "os_info",
+    "package_version", "r_version", "container_spec_digest",
+    "container_image_digest", "model_digest", "preflight_hash",
+    "prompt_template_hash", "schema_digest", "pii_config_digest"
+  )
+  for (fld in all_scalar_fields) {
     val <- entry[[fld]]
-    if (!is.null(val) && is.character(val) && length(val) == 1L && nzchar(val)) {
-      det <- pii_detect(val, config = id_cfg, include_values = FALSE)
-      if (nrow(det) > 0L) {
-        cli::cli_abort(
-          "Audit log privacy violation: field {.field {fld}} contains direct PII ({paste(unique(det$entity_type), collapse = ', ')}).",
-          class = "airgap_audit_privacy_error"
-        )
-      }
+    if (is.null(val)) next
+    fld_issues <- scan_metadata_for_pii(val, fld)
+    if (length(fld_issues) > 0L) {
+      cli::cli_abort(
+        c(
+          "Audit log privacy violation: field {.field {fld}} contains potential PII or oversized text.",
+          stats::setNames(escape_cli_braces(fld_issues), rep("x", length(fld_issues)))
+        ),
+        class = "airgap_audit_privacy_error"
+      )
     }
   }
 
   list(
     schema_version = "1.0",
-    timestamp = entry$timestamp %||% utc_timestamp(),
-    event_type = as.character(entry$event_type %||% event_type)[1L],
+    timestamp = ts_val,
+    event_type = eff_event_type,
     run_id = as.character(entry$run_id %||% generate_run_id("audit"))[1L],
     package_version = as.character(entry$package_version %||% airgapllm_version())[1L],
     r_version = as.character(entry$r_version %||% as.character(getRversion()))[1L],
@@ -263,7 +335,7 @@ normalize_audit_entry <- function(entry, event_type = "extraction_run", metadata
     pii_config_digest = entry$pii_config_digest,
     pii_counts = pii_counts,
     output_pii_leaks = out_leaks,
-    row_counts = entry$row_counts,
+    row_counts = row_counts,
     metadata = eff_meta
   )
 }
@@ -309,6 +381,7 @@ audit_log_append <- function(
   verify_existing = TRUE
 ) {
   assert_scalar_string(path, "path")
+  assert_safe_write_target(path, arg = "path")
   assert_scalar_string(event_type, "event_type")
   assert_scalar_logical(verify_existing, "verify_existing")
 
@@ -324,7 +397,7 @@ audit_log_append <- function(
         cli::cli_abort(
           c(
             "Refusing to append to tampered or corrupted audit log {.path {path}}.",
-            stats::setNames(ver$issues, rep("x", length(ver$issues)))
+            stats::setNames(escape_cli_braces(ver$issues), rep("x", length(ver$issues)))
           ),
           class = "airgap_audit_tamper_error"
         )

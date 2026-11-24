@@ -34,7 +34,7 @@ assessment (EMA) journals, patient narratives, and student essays---governed by
 Institutional Review Board (IRB), HIPAA, or FERPA protocols that strictly
 prohibit transmitting participant text to external cloud LLM APIs.
 
-**`airgapllm`** (v0.4.0) provides an auditable, privacy-first R workbench for
+**`airgapllm`** (v0.5.0) provides an auditable, privacy-first R workbench for
 **verifiably offline local LLM inference** across `Ollama`, `llama.cpp`, and
 `vLLM`. Every stage enforces defense-in-depth:
 

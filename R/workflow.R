@@ -88,17 +88,8 @@ chunk_clinical_texts <- function(
   }
   split_on <- match.arg(split_on)
 
-  if (!is.numeric(max_chars) || length(max_chars) != 1L || is.na(max_chars) ||
-      max_chars < 50 || max_chars != floor(max_chars)) {
-    cli::cli_abort("{.arg max_chars} must be an integer >= 50.", class = "airgap_validation_error")
-  }
-  max_chars <- as.integer(max_chars)
-
-  if (!is.numeric(overlap_chars) || length(overlap_chars) != 1L || is.na(overlap_chars) ||
-      overlap_chars < 0 || overlap_chars >= max_chars || overlap_chars != floor(overlap_chars)) {
-    cli::cli_abort("{.arg overlap_chars} must be an integer in [0, max_chars - 1].", class = "airgap_validation_error")
-  }
-  overlap_chars <- as.integer(overlap_chars)
+  max_chars <- assert_scalar_int(max_chars, "max_chars", min = 50L)
+  overlap_chars <- assert_scalar_int(overlap_chars, "overlap_chars", min = 0L, max = max_chars - 1L)
 
   if (nrow(data) == 0L) {
     return(tibble::tibble(
@@ -135,7 +126,9 @@ chunk_clinical_texts <- function(
     total_len <- nchar(txt, type = "chars")
     if (limit_end >= total_len) return(total_len)
     window <- substr(txt, start_pos, limit_end)
-    min_cut <- max(1L, as.integer(floor(nchar(window, type = "chars") * 0.4)))
+    win_len <- nchar(window, type = "chars")
+    # Ensure every cut strictly advances past overlap_chars so chunks never nest into duplicates
+    min_cut <- min(win_len, max(1L, as.integer(floor(win_len * 0.4)), overlap_chars + 1L))
 
     if (identical(mode, "paragraph")) {
       m <- gregexpr("\\n\\s*\\n", window, perl = TRUE)[[1L]]
@@ -203,8 +196,8 @@ chunk_clinical_texts <- function(
 
       if (cut_end >= total_len) break
       next_start <- max(cur_start + 1L, cut_end - overlap_chars + 1L)
-      # Snap overlap start forward to a clean word boundary if inside a word
-      if (overlap_chars > 0L && next_start > cur_start + 1L && next_start < cut_end) {
+      # Snap overlap start forward to a clean word boundary only for paragraph/sentence modes
+      if (!identical(split_on, "character") && overlap_chars > 0L && next_start > cur_start + 1L && next_start < cut_end) {
         prefix_slice <- substr(txt, next_start, cut_end)
         ws_pos <- regexpr("\\s+\\S", prefix_slice, perl = TRUE)[1L]
         if (ws_pos > 1L && ws_pos <= min(40L, overlap_chars)) {
@@ -294,14 +287,9 @@ pii_audit_dataframe <- function(
   if (!inherits(config, "airgap_pii_config")) {
     cli::cli_abort("{.arg config} must be an `airgap_pii_config` object.", class = "airgap_validation_error")
   }
-  if (!is.numeric(high_density_threshold) || length(high_density_threshold) != 1L ||
-      is.na(high_density_threshold) || high_density_threshold < 1 ||
-      high_density_threshold != floor(high_density_threshold)) {
-    cli::cli_abort("{.arg high_density_threshold} must be a positive integer.", class = "airgap_validation_error")
-  }
-  high_density_threshold <- as.integer(high_density_threshold)
-  preview_n <- as.integer(max(0L, preview_n))
-  preview_chars <- as.integer(max(20L, preview_chars))
+  high_density_threshold <- assert_scalar_int(high_density_threshold, "high_density_threshold", min = 1L)
+  preview_n <- assert_scalar_int(preview_n, "preview_n", min = 0L)
+  preview_chars <- assert_scalar_int(preview_chars, "preview_chars", min = 20L)
 
   row_ids <- if (is.null(id_col)) {
     as.character(seq_len(nrow(data)))
@@ -517,17 +505,8 @@ estimate_vram_requirements <- function(
   quantization <- match.arg(quantization)
   kv_cache_quant <- match.arg(kv_cache_quant)
 
-  if (!is.numeric(context_length) || length(context_length) != 1L || is.na(context_length) ||
-      context_length < 128 || context_length != floor(context_length)) {
-    cli::cli_abort("{.arg context_length} must be an integer >= 128.", class = "airgap_validation_error")
-  }
-  context_length <- as.integer(context_length)
-
-  if (!is.numeric(batch_size) || length(batch_size) != 1L || is.na(batch_size) ||
-      batch_size < 1 || batch_size != floor(batch_size)) {
-    cli::cli_abort("{.arg batch_size} must be a positive integer.", class = "airgap_validation_error")
-  }
-  batch_size <- as.integer(batch_size)
+  context_length <- assert_scalar_int(context_length, "context_length", min = 128L)
+  batch_size <- assert_scalar_int(batch_size, "batch_size", min = 1L)
 
   if (!is.numeric(overhead_gb) || length(overhead_gb) != 1L || is.na(overhead_gb) || !is.finite(overhead_gb) || overhead_gb < 0) {
     cli::cli_abort("{.arg overhead_gb} must be a non-negative finite number.", class = "airgap_validation_error")
@@ -562,10 +541,7 @@ estimate_vram_requirements <- function(
   }
 
   if (!is.null(n_layers)) {
-    if (!is.numeric(n_layers) || length(n_layers) != 1L || is.na(n_layers) || n_layers < 1 || n_layers != floor(n_layers)) {
-      cli::cli_abort("{.arg n_layers} must be a positive integer or `NULL`.", class = "airgap_validation_error")
-    }
-    arch$layers <- as.integer(n_layers)
+    arch$layers <- assert_scalar_int(n_layers, "n_layers", min = 1L)
   }
 
   # Weights GB (GiB = 1024^3 bytes; params_b * 1e9 * bytes_per_param / 1024^3)
@@ -649,8 +625,8 @@ print.airgap_vram_estimate <- function(x, ...) {
 #'
 #' @param out_dir Character scalar destination directory path for the
 #'   compliance packet.
-#' @param extraction Optional `airgap_extraction` result from
-#'   [airgap_extract()].
+#' @param extraction Optional `airgap_extraction` or `airgap_consensus` result
+#'   from [airgap_extract()] or [airgap_extract_consensus()].
 #' @param audit_log_path Optional path to an existing hash-chained JSONL audit
 #'   log (verified via [audit_log_verify()] prior to inclusion).
 #' @param container_spec Optional [airgap_container_spec()] object. If pinned
@@ -700,6 +676,7 @@ export_irb_compliance_packet <- function(
   overwrite = FALSE
 ) {
   assert_safe_host_path(out_dir, "out_dir", forbid_colon = FALSE)
+  assert_safe_write_target(out_dir, arg = "out_dir")
   assert_scalar_logical(overwrite, "overwrite")
 
   if (is.null(extraction) && is.null(audit_log_path)) {
@@ -708,8 +685,11 @@ export_irb_compliance_packet <- function(
       class = "airgap_validation_error"
     )
   }
-  if (!is.null(extraction) && !inherits(extraction, "airgap_extraction")) {
-    cli::cli_abort("{.arg extraction} must be an `airgap_extraction` object.", class = "airgap_validation_error")
+  if (!is.null(extraction) && !inherits(extraction, c("airgap_extraction", "airgap_consensus"))) {
+    cli::cli_abort(
+      "{.arg extraction} must be an `airgap_extraction` or `airgap_consensus` object.",
+      class = "airgap_validation_error"
+    )
   }
   if (!is.null(container_spec) && !inherits(container_spec, "airgap_container_spec")) {
     cli::cli_abort("{.arg container_spec} must be an `airgap_container_spec` object.", class = "airgap_validation_error")
@@ -718,7 +698,38 @@ export_irb_compliance_packet <- function(
     cli::cli_abort("{.arg preflight} must be an `airgap_preflight` object.", class = "airgap_validation_error")
   }
 
-  if (dir.exists(out_dir)) {
+  # Pre-validate & scan protocol header strings before writing any packet files
+  full_scan_cfg <- pii_config(detect_unlabeled_names = FALSE)
+  pi_non_name_ents <- setdiff(pii_default_entities(), "person_name")
+  pi_scan_cfg <- pii_config(entities = pi_non_name_ents, detect_unlabeled_names = FALSE)
+
+  hdr_fields <- list(study_title = study_title, protocol_id = protocol_id, institution = institution)
+  for (hnm in names(hdr_fields)) {
+    hv <- hdr_fields[[hnm]]
+    if (!is.null(hv)) {
+      assert_scalar_string(hv, hnm)
+      det_h <- pii_detect(hv, config = full_scan_cfg, include_values = FALSE)
+      if (nrow(det_h) > 0L) {
+        cli::cli_abort(
+          "Compliance packet privacy guard tripped on {.arg {hnm}}: direct PII detected ({paste(unique(det_h$entity_type), collapse = ', ')}).",
+          class = "airgap_audit_privacy_error"
+        )
+      }
+    }
+  }
+  if (!is.null(pi_name)) {
+    assert_scalar_string(pi_name, "pi_name")
+    det_pi <- pii_detect(pi_name, config = pi_scan_cfg, include_values = FALSE)
+    if (nrow(det_pi) > 0L) {
+      cli::cli_abort(
+        "Compliance packet privacy guard tripped on {.arg pi_name}: direct non-name PII detected ({paste(unique(det_pi$entity_type), collapse = ', ')}).",
+        class = "airgap_audit_privacy_error"
+      )
+    }
+  }
+
+  dir_existed <- dir.exists(out_dir)
+  if (dir_existed) {
     existing <- list.files(out_dir, all.files = FALSE)
     if (length(existing) > 0L && !isTRUE(overwrite)) {
       cli::cli_abort(
@@ -734,13 +745,14 @@ export_irb_compliance_packet <- function(
 
   # 1. Verified hash-chained audit log
   dest_audit <- file.path(out_dir, "audit_log.jsonl")
+  assert_safe_write_target(dest_audit, arg = "audit_log.jsonl")
   if (!is.null(audit_log_path)) {
     ver_in <- audit_log_verify(audit_log_path, strict = TRUE)
     if (!isTRUE(ver_in$valid)) {
       cli::cli_abort(
         c(
           "Cannot export compliance packet from tampered or invalid audit log {.path {audit_log_path}}.",
-          stats::setNames(ver_in$issues, rep("x", length(ver_in$issues)))
+          stats::setNames(escape_cli_braces(ver_in$issues), rep("x", length(ver_in$issues)))
         ),
         class = "airgap_audit_tamper_error"
       )
@@ -748,7 +760,8 @@ export_irb_compliance_packet <- function(
     file.copy(audit_log_path, dest_audit, overwrite = TRUE)
   } else {
     if (file.exists(dest_audit)) unlink(dest_audit)
-    audit_log_append(dest_audit, extraction, event_type = "extraction_run")
+    ev_type <- if (inherits(extraction, "airgap_consensus")) "consensus_extraction_run" else "extraction_run"
+    audit_log_append(dest_audit, extraction, event_type = ev_type)
   }
   ver_dest <- audit_log_verify(dest_audit, strict = TRUE)
   if (!isTRUE(ver_dest$valid)) {
@@ -759,6 +772,8 @@ export_irb_compliance_packet <- function(
   # 2. Pre-flight isolation attestation JSON (zero raw text)
   eff_pf <- preflight %||% (if (!is.null(extraction)) extraction_preflight(extraction) else NULL)
   if (!is.null(eff_pf)) {
+    dest_pf <- file.path(out_dir, "preflight_attestation.json")
+    assert_safe_write_target(dest_pf, arg = "preflight_attestation.json")
     pf_payload <- list(
       status = eff_pf$status,
       passed = eff_pf$passed,
@@ -772,7 +787,7 @@ export_irb_compliance_packet <- function(
     )
     writeLines(
       as.character(jsonlite::toJSON(pf_payload, auto_unbox = TRUE, pretty = TRUE, null = "null")),
-      con = file.path(out_dir, "preflight_attestation.json"),
+      con = dest_pf,
       useBytes = TRUE
     )
     written_files <- c(written_files, "preflight_attestation.json")
@@ -781,9 +796,15 @@ export_irb_compliance_packet <- function(
   # 3. Hardened container specs (when pinned)
   if (!is.null(container_spec)) {
     if (!is.null(container_spec$image_digest)) {
-      emit_docker_run(container_spec, file = file.path(out_dir, "container_docker_run.sh"))
-      emit_docker_compose(container_spec, file = file.path(out_dir, "docker-compose.yml"))
-      emit_apptainer_def(container_spec, file = file.path(out_dir, "container_apptainer.def"))
+      dest_run <- file.path(out_dir, "container_docker_run.sh")
+      dest_cmp <- file.path(out_dir, "docker-compose.yml")
+      dest_app <- file.path(out_dir, "container_apptainer.def")
+      assert_safe_write_target(dest_run, arg = "container_docker_run.sh")
+      assert_safe_write_target(dest_cmp, arg = "docker-compose.yml")
+      assert_safe_write_target(dest_app, arg = "container_apptainer.def")
+      emit_docker_run(container_spec, file = dest_run)
+      emit_docker_compose(container_spec, file = dest_cmp)
+      emit_apptainer_def(container_spec, file = dest_app)
       written_files <- c(
         written_files,
         "container_docker_run.sh",
@@ -796,6 +817,10 @@ export_irb_compliance_packet <- function(
   }
 
   # 4. Ready-to-paste Markdown & Quarto IRB narratives (verified from dest_audit)
+  dest_md <- file.path(out_dir, "irb_protocol_narrative.md")
+  dest_qmd <- file.path(out_dir, "irb_protocol_narrative.qmd")
+  assert_safe_write_target(dest_md, arg = "irb_protocol_narrative.md")
+  assert_safe_write_target(dest_qmd, arg = "irb_protocol_narrative.qmd")
   generate_irb_narrative(
     source = dest_audit,
     study_title = study_title,
@@ -804,7 +829,7 @@ export_irb_compliance_packet <- function(
     pi_name = pi_name,
     regulatory_framework = regulatory_framework,
     format = "markdown",
-    file = file.path(out_dir, "irb_protocol_narrative.md")
+    file = dest_md
   )
   generate_irb_narrative(
     source = dest_audit,
@@ -814,16 +839,31 @@ export_irb_compliance_packet <- function(
     pi_name = pi_name,
     regulatory_framework = regulatory_framework,
     format = "quarto",
-    file = file.path(out_dir, "irb_protocol_narrative.qmd")
+    file = dest_qmd
   )
   written_files <- c(written_files, "irb_protocol_narrative.md", "irb_protocol_narrative.qmd")
 
-  # 5. Active zero-PII verification scan on audit & preflight artifacts before sealing
-  scan_cfg <- pii_config(entities = c("email", "ssn", "phone", "street_address"), detect_unlabeled_names = FALSE)
-  for (fn in intersect(written_files, c("audit_log.jsonl", "preflight_attestation.json"))) {
+  # 5. Active zero-PII verification scan across EVERY exported artifact before sealing
+  strip_safe_protocol_tokens <- function(txt, allow_pi_line = FALSE) {
+    if (isTRUE(allow_pi_line) && !is.null(pi_name)) {
+      lines <- strsplit(txt, "\n", fixed = TRUE)[[1L]]
+      lines <- lines[!grepl("^- \\*\\*Principal Investigator:\\*\\* ", lines)]
+      txt <- paste(lines, collapse = "\n")
+    }
+    # Strip canonical ISO-8601 UTC timestamps and loopback literals so they do not false-positive
+    txt <- gsub("\\b\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z\\b", "[TS_UTC]", txt, perl = TRUE)
+    txt <- gsub("\\b(?:127\\.0\\.0\\.1|0\\.0\\.0\\.0)\\b", "[LOOPBACK_IP]", txt, perl = TRUE)
+    txt <- gsub("\\[::1\\]|(?<![0-9a-fA-F:])::1(?![0-9a-fA-F:])", "[LOOPBACK_IP6]", txt, perl = TRUE)
+    txt
+  }
+
+  for (fn in written_files) {
     txt_blob <- paste(readLines(file.path(out_dir, fn), warn = FALSE, encoding = "UTF-8"), collapse = "\n")
-    det <- pii_detect(txt_blob, config = scan_cfg, include_values = FALSE)
+    is_narr <- fn %in% c("irb_protocol_narrative.md", "irb_protocol_narrative.qmd")
+    scrubbed <- strip_safe_protocol_tokens(txt_blob, allow_pi_line = is_narr)
+    det <- pii_detect(scrubbed, config = full_scan_cfg, include_values = FALSE)
     if (nrow(det) > 0L) {
+      unlink(file.path(out_dir, written_files), force = TRUE)
       cli::cli_abort(
         "Compliance packet privacy guard tripped on {.file {fn}}: direct PII detected ({paste(unique(det$entity_type), collapse = ', ')}).",
         class = "airgap_audit_privacy_error"
@@ -831,7 +871,7 @@ export_irb_compliance_packet <- function(
     }
   }
 
-  # 6. Compute per-file SHA-256 manifest and seal packet_manifest.json
+  # 6. Compute per-file SHA-256 manifest, scan manifest body itself, and seal packet_manifest.json
   written_files <- sort(unique(written_files))
   full_paths <- file.path(out_dir, written_files)
   file_digests <- vapply(full_paths, sha256_file_stream, character(1L))
@@ -865,11 +905,19 @@ export_irb_compliance_packet <- function(
   packet_digest <- sha256_object(manifest_body)
   manifest_body$packet_digest <- packet_digest
 
-  writeLines(
-    as.character(jsonlite::toJSON(manifest_body, auto_unbox = TRUE, pretty = TRUE, null = "null")),
-    con = file.path(out_dir, "packet_manifest.json"),
-    useBytes = TRUE
-  )
+  manifest_json <- as.character(jsonlite::toJSON(manifest_body, auto_unbox = TRUE, pretty = TRUE, null = "null"))
+  det_man <- pii_detect(strip_safe_protocol_tokens(manifest_json), config = full_scan_cfg, include_values = FALSE)
+  if (nrow(det_man) > 0L) {
+    unlink(file.path(out_dir, written_files), force = TRUE)
+    cli::cli_abort(
+      "Compliance packet privacy guard tripped on {.file packet_manifest.json}: direct PII detected ({paste(unique(det_man$entity_type), collapse = ', ')}).",
+      class = "airgap_audit_privacy_error"
+    )
+  }
+
+  dest_manifest <- file.path(out_dir, "packet_manifest.json")
+  assert_safe_write_target(dest_manifest, arg = "packet_manifest.json")
+  writeLines(manifest_json, con = dest_manifest, useBytes = TRUE)
 
   structure(
     list(

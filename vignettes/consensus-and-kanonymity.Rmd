@@ -84,7 +84,9 @@ cons_res
 Inspect field-level consensus diagnostics and the long-format pass table
 (`unit_id`, `pass_id`, `prompt_id`, `seed`, plus all typed schema columns),
 which is directly structured for multi-facet psychometric reliability modeling
-(such as Generalizability Theory / G-studies):
+(such as Generalizability Theory / G-studies; when loading alongside other LLM
+evaluation packages that also export `schema_field()`, qualify calls as
+`airgapllm::schema_field()`):
 
 ```{r consensus-diag}
 consensus_diagnostics(cons_res)

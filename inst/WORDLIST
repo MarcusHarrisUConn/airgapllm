@@ -1,5 +1,6 @@
 AAD
 AES
+Allowlisting
 Allowlists
 Apptainer
 Benchmarker
@@ -13,6 +14,7 @@ Cryptographic
 DNS
 DOBs
 Deterministically
+EHR
 EMA
 FERPA
 GGUF
@@ -28,6 +30,7 @@ HPC
 IPv
 IRB
 IRBs
+Injective
 Invariants
 JSONL
 KV
@@ -46,7 +49,9 @@ Pluggable
 Pre
 Pseudonymization
 Pseudonymized
+QI
 Qwen
+RCE
 ROCm
 ReDoS
 Regexes
@@ -54,6 +59,7 @@ Resumable
 SHA
 SSNs
 SSRF
+Sanitization
 Slurm
 Symlink
 Symlinked
@@ -66,6 +72,7 @@ airgap
 allowlist
 allowlisted
 allowlists
+anonymization
 canonicalization
 checkpointed
 checkpointing
@@ -79,8 +86,10 @@ de
 decrypt
 decrypts
 deterministically
+dotfiles
 enum
 env
+exfiltration
 filesystem
 filesystems
 fullwidth
@@ -88,12 +97,14 @@ gapped
 generalizability
 homoglyph
 homoglyphs
+injective
 invariants
 lifecycle
 lookahead
 loopback
 losslessly
 mitigations
+nonces
 nullability
 obfuscator
 obfuscators
@@ -121,7 +132,9 @@ tibble
 tibbles
 tmpfs
 unbypassed
+unencrypted
 uniques
+unsanitized
 untrusted
 uppercased
 userinfo

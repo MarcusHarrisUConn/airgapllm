@@ -4,12 +4,17 @@
 \alias{pii_vault_load}
 \title{Load a Saved PII Pseudonymization Vault from Disk}
 \usage{
-pii_vault_load(path, key = NULL)
+pii_vault_load(path, key = NULL, require_encrypted = !is.null(key))
 }
 \arguments{
 \item{path}{Character scalar path to the vault file.}
 
 \item{key}{Secret key (required when the vault file is encrypted).}
+
+\item{require_encrypted}{Logical scalar; if \code{TRUE} (default whenever \code{key}
+is supplied), aborts if the vault file has \code{encrypted = FALSE}. Pass
+\code{require_encrypted = FALSE} with \code{key = NULL} only when explicitly loading
+an unencrypted development vault.}
 }
 \value{
 An \code{airgap_pii_vault} object.
@@ -19,6 +24,8 @@ Reads and (if encrypted) authenticates and decrypts an \code{airgap_pii_vault}
 file written by \code{\link[=pii_vault_save]{pii_vault_save()}}. Verifies the HMAC-SHA256 authentication
 tag in constant time BEFORE decryption to defeat padding-oracle and timing
 attacks while never exposing plaintext or key material in error messages.
+Refuses unencrypted vault files whenever \code{key} is supplied or
+\code{require_encrypted = TRUE} to prevent encryption-downgrade attacks.
 }
 \examples{
 key <- pii_vault_key()

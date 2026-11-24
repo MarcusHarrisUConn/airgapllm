@@ -160,6 +160,41 @@ assert_scalar_string <- function(x, arg = deparse(substitute(x)), allow_empty = 
   invisible(x)
 }
 
+#' Escape curly braces so untrusted strings are never evaluated by cli/glue
+#' @noRd
+escape_cli_braces <- function(x) {
+  s <- as.character(x)
+  s <- gsub("{", "{{", s, fixed = TRUE)
+  gsub("}", "}}", s, fixed = TRUE)
+}
+
+#' Validate a single finite integer scalar within optional bounds
+#' @noRd
+assert_scalar_int <- function(
+  x,
+  arg = deparse(substitute(x)),
+  min = NULL,
+  max = NULL,
+  allow_null = FALSE,
+  class = "airgap_validation_error"
+) {
+  if (is.null(x)) {
+    if (isTRUE(allow_null)) return(NULL)
+    cli::cli_abort("{.arg {arg}} must not be `NULL`.", class = class)
+  }
+  if (!is.numeric(x) || is.logical(x) || length(x) != 1L || is.na(x) ||
+      !is.finite(x) || x != floor(x) || abs(x) > .Machine$integer.max) {
+    cli::cli_abort("{.arg {arg}} must be a single finite integer.", class = class)
+  }
+  if (!is.null(min) && x < min) {
+    cli::cli_abort("{.arg {arg}} must be an integer >= {min}.", class = class)
+  }
+  if (!is.null(max) && x > max) {
+    cli::cli_abort("{.arg {arg}} must be an integer <= {max}.", class = class)
+  }
+  as.integer(x)
+}
+
 #' Validate logical scalar
 #' @noRd
 assert_scalar_logical <- function(x, arg = deparse(substitute(x))) {

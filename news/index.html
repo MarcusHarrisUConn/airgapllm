@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,6 +45,15 @@
       <small>Source: <a href="https://github.com/MarcusHarrisUConn/airgapllm/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.1" id="airgapllm-051">airgapllm 0.5.1<a class="anchor" aria-label="anchor" href="#airgapllm-051"></a></h2>
+<div class="section level3">
+<h3 id="cross-platform-windows-ci-compatibility-fixes-0-5-1">Cross-Platform Windows CI Compatibility Fixes<a class="anchor" aria-label="anchor" href="#cross-platform-windows-ci-compatibility-fixes-0-5-1"></a></h3>
+<ul><li>Fixed false-positive <code>person_name</code> audit PII rejection on Windows <code>os_info</code> strings (e.g., <code>"Windows Server 2022 x64 (build 20348)"</code>) by scanning <code>os_info</code> against high-precision direct PII classes in <code>normalize_audit_entry()</code> and adding unambiguous OS/platform terms to <code>pii_name_stopwords()</code> while preserving full strict PII scanning on all user-controllable audit fields (<code>run_id</code>, <code>decoding_params</code>, <code>metadata</code>, <code>model_name</code>, <code>event_type</code>).</li>
+<li>Hardened cross-platform path validation in <code>R/security.R</code> (<code>assert_safe_host_path()</code>, <code>assert_safe_write_target()</code>, <code>assert_path_confined()</code>) and <code>R/pii.R</code> (<code><a href="../reference/pii_vault_save.html">pii_vault_save()</a></code>, <code><a href="../reference/pii_vault_rotate_key.html">pii_vault_rotate_key()</a></code>) to handle Windows drive prefixes (<code>C:\</code>, <code>C:/</code>), backslash separators, 8.3 short paths (<code>RUNNER~1</code>) via deepest-existing-ancestor canonicalization, case-insensitive path comparisons, and safe Windows file replacement while still blocking colon bind-mount injection, <code>..</code> traversal, shell metacharacters, and symlinks.</li>
+<li>Guarded unprivileged Windows <code><a href="https://rdrr.io/r/base/files.html" class="external-link">file.symlink()</a></code> calls in <code>tests/testthat/test-adversarial-security.R</code> and added permanent Windows/Linux/macOS <code>os_info</code> and drive-path regression tests in <code>tests/testthat/test-peer-redteam.R</code>.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.5.0" id="airgapllm-050">airgapllm 0.5.0<a class="anchor" aria-label="anchor" href="#airgapllm-050"></a></h2>
 <div class="section level3">

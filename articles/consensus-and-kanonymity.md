@@ -121,7 +121,7 @@ head(consensus_passes(cons_res), 8L)
 audit_log_verify(audit_file)
 #> <airgap_audit_verification> [VALID]
 #>   Entries verified: 1
-#>   Chain head hash:  sha256:d5e62e3460a5997b5357de504bebacaaf421e8d7245ab4c7437528ead31d37dc
+#>   Chain head hash:  sha256:7e30aab4326e0f730c4363023371db1c640c3e451f0baae01477cea47faf3f43
 ```
 
 ## 2. Quasi-Identifier $`k`$-Anonymity & $`l`$-Diversity Export Audits
@@ -280,7 +280,7 @@ bm
 #> <airgap_benchmark> [mock | llama3.1:8b-instruct-q4_K_M]
 #>   Sample rows:     8 (succeeded=8 [100%], failed=0)
 #>   Repair retries:  1 total (12.5% of rows retried)
-#>   Throughput:      444.44 rows/sec (elapsed=0.018s)
-#>   Latency (ms):    p50=1 | p95=2.95 | mean=1 (range 0-4)
-#>   Projected ETA:   22.5 sec for 10000 rows
+#>   Throughput:      296.30 rows/sec (elapsed=0.027s)
+#>   Latency (ms):    p50=1 | p95=3.6 | mean=1.25 (range 0-5)
+#>   Projected ETA:   33.7 sec for 10000 rows
 ```

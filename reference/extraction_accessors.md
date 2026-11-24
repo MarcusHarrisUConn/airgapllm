@@ -75,9 +75,9 @@ extraction_privacy_report(res)
 #>     - person_name: 1 (1 docs, 100%)
 extraction_preflight(res)
 #> <airgap_preflight> [PASS]
-#>   Checked at:   2026-11-24T21:06:04Z
+#>   Checked at:   2026-11-24T21:43:22Z
 #>   Endpoint:     offline_mock
-#>   Record hash:  sha256:8fe5ce53f979b2a891a7834d9744b61ee067e3b8949e0b14b82b56c6e4729c5b
+#>   Record hash:  sha256:89b471a31453c07cd1e10e5e5f34b63d3049a7214457b886ad203f537097472f
 #>   [PASS] endpoint_loopback_only: Built-in offline mock runtime.
 #>   [PASS] model_digest_pinned: Model digest pinned in configuration (sha256:0000000000000000000000000000000000000000000000000000000000000000); pass `model_path` to verify file bytes.
 #>   [PASS] env_proxy_isolation: No outbound proxy environment variables detected.

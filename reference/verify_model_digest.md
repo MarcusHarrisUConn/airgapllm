@@ -64,7 +64,7 @@ writeBin(charToRaw("mock-gguf-weights-v1"), tmp_model)
 res <- verify_model_digest(tmp_model)
 verify_model_digest(tmp_model, expected_digest = res$actual_digest)
 #> <airgap_digest_verification> [MATCHED]
-#>   Path:       /tmp/RtmpcmtWIm/file17cf315e67b8.gguf
+#>   Path:       /tmp/RtmpYwr7Bt/file1944436fb2d6.gguf
 #>   Size bytes: 20
 #>   Actual:     sha256:2a1762b7ed43674195cebce6e770011d1738919f1c866411ab76ab2de9b07aa1
 #>   Expected:   sha256:2a1762b7ed43674195cebce6e770011d1738919f1c866411ab76ab2de9b07aa1

@@ -97,15 +97,15 @@ pse <- pii_pseudonymize(
 
 # Pseudonymized text preserves coreference for Dr. Elena Vance across rows 1 & 2
 pse$text
-#> [1] "At <<CLINIC_d2de9d36f9>> (<<COHORT_ID_dcc6c056e9>>), <<PERSON_NAME_ea8c8587c9>> administered the Beck Depression Inventory."
-#> [2] "Follow-up with <<PERSON_NAME_ea8c8587c9>> at <<EMAIL_ac8b8e9f3b>>; SSN <<SSN_b0fb655a09>> confirmed."                       
+#> [1] "At <<CLINIC_8694bb8ec1>> (<<COHORT_ID_f7652d609c>>), <<PERSON_NAME_d4d76dd643>> administered the Beck Depression Inventory."
+#> [2] "Follow-up with <<PERSON_NAME_d4d76dd643>> at <<EMAIL_083c98abd7>>; SSN <<SSN_ea6c8f0c03>> confirmed."                       
 #> [3] "Participant drank Dr. Pepper before session; Major Depressive Disorder symptoms stable."
 
 # Printing the vault NEVER exposes raw sensitive mappings
 pse$vault
 #> <airgap_pii_vault> (sensitive mappings hidden)
-#>   Vault ID:        vault_20261124T210617Z_7f80e037
-#>   Key fingerprint: 53620bc0fed7ef4e
+#>   Vault ID:        vault_20261124T214338Z_eada1e9b
+#>   Key fingerprint: e919ea420e785568
 #>   Stored tokens:   5
 #>   By entity type:  clinic=1, cohort_id=1, email=1, person_name=1, ssn=1
 ```
@@ -200,10 +200,10 @@ extraction_throughput(resumed)
 #> [1] 0
 #> 
 #> $elapsed_sec
-#> [1] 0.005
+#> [1] 0.009
 #> 
 #> $rows_per_sec
-#> [1] 1000
+#> [1] 555.56
 resumed
 #> # A tibble: 8 × 8
 #>   doc_id  affect   stress social_support .status .attempts .error .elapsed_ms
@@ -233,30 +233,30 @@ audit_file <- tempfile(fileext = ".audit.jsonl")
 
 audit_log_append(audit_file, resumed, metadata = list(site = "Site-A", wave = "Wave-1"))
 #> <airgap_audit_entry> #1 [extraction_run]
-#>   Run ID:       run_20261124T210617Z_af203687
-#>   Timestamp:    2026-11-24T21:06:17Z
+#>   Run ID:       run_20261124T214339Z_ef86326f
+#>   Timestamp:    2026-11-24T21:43:39Z
 #>   Isolation:    PASS
 #>   PII policy:   redact
 #>   Prev hash:    GENESIS
-#>   Entry hash:   sha256:05bc006bbd45666476635168827b4e5557e3ab7a8a48eea4f91f75c4b90c8e39
+#>   Entry hash:   sha256:5e3e9f5346f151103367612fcbff351a840e14bbefcadded3685f0f4828d6a56
 audit_log_append(
   audit_file,
   preflight_isolation_check(endpoint = "http://127.0.0.1:11434"),
   metadata = list(site = "Site-A")
 )
 #> <airgap_audit_entry> #2 [preflight_check]
-#>   Run ID:       preflight_20261124T210617Z_088bbeea
-#>   Timestamp:    2026-11-24T21:06:17Z
+#>   Run ID:       preflight_20261124T214339Z_0fea7958
+#>   Timestamp:    2026-11-24T21:43:39Z
 #>   Isolation:    PASS
 #>   PII policy:   NA
-#>   Prev hash:    sha256:05bc006bbd4566647
-#>   Entry hash:   sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236
+#>   Prev hash:    sha256:5e3e9f5346f151103
+#>   Entry hash:   sha256:d56e0a508c04540bff6946bed44b1a26a9c07fa4e4053073d71c802d98d8f630
 
 # Clean ledger verifies as VALID
 audit_log_verify(audit_file)
 #> <airgap_audit_verification> [VALID]
 #>   Entries verified: 2
-#>   Chain head hash:  sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236
+#>   Chain head hash:  sha256:d56e0a508c04540bff6946bed44b1a26a9c07fa4e4053073d71c802d98d8f630
 
 # Simulate post-hoc tampering on line 1
 tampered_file <- tempfile(fileext = ".tampered.jsonl")
@@ -267,9 +267,9 @@ writeLines(lines, tampered_file)
 audit_log_verify(tampered_file)
 #> <airgap_audit_verification> [TAMPERED / INVALID]
 #>   Entries verified: 2
-#>   Chain head hash:  sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236
+#>   Chain head hash:  sha256:d56e0a508c04540bff6946bed44b1a26a9c07fa4e4053073d71c802d98d8f630
 #>   First invalid:    line 1
-#>   [!] Line 1: Hash mismatch (tampered entry): stored sha256:05bc006bbd45666476635168827b4e5557e3ab7a8a48eea4f91f75c4b90c8e39 != computed sha256:8635f62eab7c3725e9b6a670b06634e51c75ceda9921e35a752ae1013b2e022e.
+#>   [!] Line 1: Hash mismatch (tampered entry): stored sha256:5e3e9f5346f151103367612fcbff351a840e14bbefcadded3685f0f4828d6a56 != computed sha256:3b8b6e446c849f8a1b2d4d60fa08cbacdc427bca0edb4fa7e2f1cf36a8bf89f2.
 ```
 
 Attempting to write raw text keys or PII into an audit log is rejected

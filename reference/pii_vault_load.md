@@ -46,8 +46,8 @@ pii_vault_save(pse$vault, vf, key = key)
 loaded <- pii_vault_load(vf, key = key)
 loaded
 #> <airgap_pii_vault> (sensitive mappings hidden)
-#>   Vault ID:        vault_20261124T210606Z_a72679e3
-#>   Key fingerprint: 011672a96cc1e255
+#>   Vault ID:        vault_20261124T214324Z_2504206e
+#>   Key fingerprint: a61ce1e65fb176a7
 #>   Stored tokens:   1
 #>   By entity type:  email=1
 unlink(vf)

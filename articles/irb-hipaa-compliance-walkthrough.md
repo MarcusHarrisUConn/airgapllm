@@ -164,8 +164,8 @@ pse <- pii_pseudonymize(
 )
 pse$vault
 #> <airgap_pii_vault> (sensitive mappings hidden)
-#>   Vault ID:        vault_20261124T210615Z_b27770cb
-#>   Key fingerprint: a37632e0281213ee
+#>   Vault ID:        vault_20261124T214336Z_f4e46a20
+#>   Key fingerprint: 260fecc27b13fb83
 #>   Stored tokens:   12
 #>   By entity type:  age_over_89=2, date=2, email=1, mrn_id=1, person_name=2, phone=1, ssn=1, street_address=1, zip_code=1
 
@@ -174,13 +174,13 @@ key_wave2 <- pii_vault_key()
 rot <- pii_vault_rotate_key(vault_path, old_key = key_wave1, new_key = key_wave2)
 rot[c("vault_id", "old_key_fingerprint", "new_key_fingerprint", "n_tokens")]
 #> $vault_id
-#> [1] "vault_20261124T210615Z_b27770cb"
+#> [1] "vault_20261124T214336Z_f4e46a20"
 #> 
 #> $old_key_fingerprint
-#> [1] "a37632e0281213ee"
+#> [1] "260fecc27b13fb83"
 #> 
 #> $new_key_fingerprint
-#> [1] "96f970475ebaa1ea"
+#> [1] "cb4d981efeeed23e"
 #> 
 #> $n_tokens
 #> [1] 12
@@ -253,7 +253,7 @@ extracted[, c("note_id", "sentiment", "severity", "crisis_flag", ".status", ".at
 audit_log_verify(audit_path)
 #> <airgap_audit_verification> [VALID]
 #>   Entries verified: 1
-#>   Chain head hash:  sha256:1159f9885d5e16e6e8bc69f28e18c105b5c5349abe76f7c2c9a1d2ef3f1d3f41
+#>   Chain head hash:  sha256:9d90196ba0e4099de019286db47873188c41c229bde24af2f5420541814915aa
 ```
 
 ## Step 5: Export a Self-Contained, SHA-256-Sealed IRB Compliance Packet
@@ -281,19 +281,19 @@ pkt <- export_irb_compliance_packet(
 
 pkt
 #> <airgap_compliance_packet> [AUDIT: VERIFIED]
-#>   Directory:     /tmp/RtmpdWPEwd/airgap_irb_walkthrough_1c0f183926a4/irb_submission_packet
+#>   Directory:     /tmp/RtmpHIJBi9/airgap_irb_walkthrough_1d8ba3def15/irb_submission_packet
 #>   Artifacts:     7 file(s) + packet_manifest.json
-#>   Audit head:    sha256:1159f9885d5e16e6e8bc69f28e18c105b5c5349abe76f7c2c9a1d2ef3f1d3f41
-#>   Packet digest: sha256:362bf3958ba9c57cba1ebb53bfa71abe534f691b03edee75859136f8259e00e1
+#>   Audit head:    sha256:9d90196ba0e4099de019286db47873188c41c229bde24af2f5420541814915aa
+#>   Packet digest: sha256:61198eb713ea721af02de603dd417e49227d32c016514d12c995e6068a47685d
 pkt$files
 #> # A tibble: 7 × 3
 #>   file                       size_bytes sha256                                  
 #>   <chr>                           <dbl> <chr>                                   
-#> 1 audit_log.jsonl                  1517 sha256:ad6f87dcc98de29c2e6ab81bdda73d20…
-#> 2 container_apptainer.def          1040 sha256:61a6ca380ff83053d14fcaf7d9dc0662…
-#> 3 container_docker_run.sh           637 sha256:2b3ab3d7a24bf52996d8ee38e2a57f2a…
-#> 4 docker-compose.yml                945 sha256:ec990ca6dfb4fa49445a52ce91658b92…
-#> 5 irb_protocol_narrative.md        5121 sha256:020f59db2788ef4e574227cd27c9d898…
-#> 6 irb_protocol_narrative.qmd       5268 sha256:a4772ba962e0d7936798f1652a322dec…
-#> 7 preflight_attestation.json       2327 sha256:ab04fa12af319c8a72eab30d98356874…
+#> 1 audit_log.jsonl                  1517 sha256:c3d9fe02952ca2c1420bd0d224c42be5…
+#> 2 container_apptainer.def          1040 sha256:d574f5d2268124e079fbd2c954508781…
+#> 3 container_docker_run.sh           637 sha256:a8551f9fd3be621b107bfb1c4f91a32e…
+#> 4 docker-compose.yml                945 sha256:327ac8de475168269f085dad0475d04d…
+#> 5 irb_protocol_narrative.md        5121 sha256:5cd0bf258cb759477151118ea5565097…
+#> 6 irb_protocol_narrative.qmd       5268 sha256:f1fbe05421ad214671c745b207b1c99e…
+#> 7 preflight_attestation.json       2327 sha256:6527eb38e048e21ff91ffac6f9980edf…
 ```

@@ -82,10 +82,12 @@ find_forbidden_audit_keys <- function(x, path = "") {
 
 #' Recursively scan free-text metadata strings for accidental PII or oversized text blobs
 #' @noRd
-scan_metadata_for_pii <- function(x, path = "metadata") {
+scan_metadata_for_pii <- function(x, path = "metadata", cfg = NULL) {
   if (is.null(x)) return(character())
   issues <- character()
-  cfg <- pii_config(detect_unlabeled_names = TRUE)
+  if (is.null(cfg)) {
+    cfg <- pii_config(detect_unlabeled_names = TRUE)
+  }
 
   walk <- function(obj, p) {
     if (is.character(obj)) {
@@ -289,9 +291,28 @@ normalize_audit_entry <- function(entry, event_type = "extraction_run", metadata
     )
   }
 
+  # Scan os_info with high-precision direct PII entities (excluding person_name/date false
+  # positives on standard OS platform strings such as "Windows Server 2022" or "Rocky Linux")
+  os_pii_cfg <- pii_config(
+    entities = setdiff(pii_default_entities(), c("person_name", "date")),
+    detect_unlabeled_names = FALSE
+  )
+  if (!is.null(entry$os_info)) {
+    os_issues <- scan_metadata_for_pii(entry$os_info, "os_info", cfg = os_pii_cfg)
+    if (length(os_issues) > 0L) {
+      cli::cli_abort(
+        c(
+          "Audit log privacy violation: field {.field os_info} contains potential PII or oversized text.",
+          stats::setNames(escape_cli_braces(os_issues), rep("x", length(os_issues)))
+        ),
+        class = "airgap_audit_privacy_error"
+      )
+    }
+  }
+
   all_scalar_fields <- c(
     "run_id", "model_name", "container_backend", "network_mode",
-    "endpoint_class", "isolation_status", "pii_policy", "os_info",
+    "endpoint_class", "isolation_status", "pii_policy",
     "package_version", "r_version", "container_spec_digest",
     "container_image_digest", "model_digest", "preflight_hash",
     "prompt_template_hash", "schema_digest", "pii_config_digest"

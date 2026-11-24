@@ -183,24 +183,28 @@ test_that("container emitters and model verifier block shell/YAML/Apptainer inje
   legit_file <- file.path(model_dir, "shard1.safetensors")
   writeBin(charToRaw("legitimate-weights"), legit_file)
   sym_file <- file.path(model_dir, "shard2.safetensors")
-  file.symlink(secret_file, sym_file)
+  sym_ok <- isTRUE(suppressWarnings(file.symlink(secret_file, sym_file)))
 
-  expect_error(verify_model_digest(sym_file), class = "airgap_security_error")
-  expect_error(verify_model_digest(model_dir), class = "airgap_security_error")
+  if (sym_ok) {
+    expect_error(verify_model_digest(sym_file), class = "airgap_security_error")
+    expect_error(verify_model_digest(model_dir), class = "airgap_security_error")
+  }
   expect_error(
     verify_model_digest(file.path(model_dir, "..", basename(outside_dir), "host_secret.txt")),
     class = "airgap_security_error"
   )
 
-  spec_sym <- airgap_container_spec(
-    backend = "vllm",
-    image_digest = dig,
-    model_dir = model_dir,
-    model_file = "shard2.safetensors",
-    model_digest = verify_model_digest(legit_file)$actual_digest
-  )
-  pf_sym <- preflight_isolation_check(spec = spec_sym, model_path = sym_file)
-  expect_false(pf_sym$passed)
+  if (sym_ok) {
+    spec_sym <- airgap_container_spec(
+      backend = "vllm",
+      image_digest = dig,
+      model_dir = model_dir,
+      model_file = "shard2.safetensors",
+      model_digest = verify_model_digest(legit_file)$actual_digest
+    )
+    pf_sym <- preflight_isolation_check(spec = spec_sym, model_path = sym_file)
+    expect_false(pf_sym$passed)
+  }
 })
 
 test_that("cryptographic vault v2 enforces HKDF key separation, fresh salt/IV, constant-time MAC, and 0600 permissions", {

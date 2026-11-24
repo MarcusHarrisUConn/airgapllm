@@ -1,3 +1,11 @@
+# airgapllm 0.5.1
+
+## Cross-Platform Windows CI Compatibility Fixes
+
+* Fixed false-positive `person_name` audit PII rejection on Windows `os_info` strings (e.g., `"Windows Server 2022 x64 (build 20348)"`) by scanning `os_info` against high-precision direct PII classes in `normalize_audit_entry()` and adding unambiguous OS/platform terms to `pii_name_stopwords()` while preserving full strict PII scanning on all user-controllable audit fields (`run_id`, `decoding_params`, `metadata`, `model_name`, `event_type`).
+* Hardened cross-platform path validation in `R/security.R` (`assert_safe_host_path()`, `assert_safe_write_target()`, `assert_path_confined()`) and `R/pii.R` (`pii_vault_save()`, `pii_vault_rotate_key()`) to handle Windows drive prefixes (`C:\`, `C:/`), backslash separators, 8.3 short paths (`RUNNER~1`) via deepest-existing-ancestor canonicalization, case-insensitive path comparisons, and safe Windows file replacement while still blocking colon bind-mount injection, `..` traversal, shell metacharacters, and symlinks.
+* Guarded unprivileged Windows `file.symlink()` calls in `tests/testthat/test-adversarial-security.R` and added permanent Windows/Linux/macOS `os_info` and drive-path regression tests in `tests/testthat/test-peer-redteam.R`.
+
 # airgapllm 0.5.0
 
 ## Independent Peer Red-Team Security, Privacy & Robustness Hardening

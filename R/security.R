@@ -176,9 +176,14 @@ assert_safe_env_entry <- function(name, value) {
   invisible(TRUE)
 }
 
-#' Validate a local host filesystem path for safe container bind mounting
+#' Validate a local host filesystem path for safe container bind mounting or local output
 #' @noRd
-assert_safe_host_path <- function(path, arg = "path", forbid_colon = TRUE) {
+assert_safe_host_path <- function(
+  path,
+  arg = "path",
+  forbid_colon = TRUE,
+  allow_windows_path = identical(.Platform$OS.type, "windows")
+) {
   assert_scalar_string(path, arg)
   assert_no_control_chars(path, arg)
 
@@ -190,21 +195,31 @@ assert_safe_host_path <- function(path, arg = "path", forbid_colon = TRUE) {
     )
   }
 
-  # Reject backslashes, shell metacharacters, and Docker volume option injection (:)
-  if (grepl("[\\\\`$|;&<>]", path, perl = TRUE)) {
+  # Reject shell metacharacters (and backslashes unless valid Windows filesystem path)
+  bad_pat <- if (isTRUE(allow_windows_path)) "[`$|;&<>]" else "[\\\\`$|;&<>]"
+  if (grepl(bad_pat, path, perl = TRUE)) {
     cli::cli_abort(
       "Unsafe shell metacharacter or backslash rejected in {.arg {arg}}.",
       class = "airgap_security_error"
     )
   }
-  if (isTRUE(forbid_colon) && grepl(":", path, fixed = TRUE)) {
+
+  # Reject bind-mount option injection (':'), permitting only a Windows drive prefix (e.g. C:\ or C:/)
+  colon_check_str <- if (isTRUE(allow_windows_path) && grepl("^[A-Za-z]:[/\\\\]", path, perl = TRUE)) {
+    substr(path, 3L, nchar(path))
+  } else {
+    path
+  }
+  if (isTRUE(forbid_colon) && grepl(":", colon_check_str, fixed = TRUE)) {
     cli::cli_abort(
       "Colon (':') is prohibited in {.arg {arg}} to prevent Docker/Apptainer bind-mount option injection.",
       class = "airgap_security_error"
     )
   }
-  # Reject path traversal segments ("..")
-  segs <- strsplit(path, "/", fixed = TRUE)[[1L]]
+
+  # Reject path traversal segments ("..") across both POSIX and Windows separators
+  norm_seps <- if (isTRUE(allow_windows_path)) gsub("\\\\", "/", path) else path
+  segs <- strsplit(norm_seps, "/", fixed = TRUE)[[1L]]
   if (any(segs == "..")) {
     cli::cli_abort(
       "Path traversal ('..') is prohibited in {.arg {arg}}.",
@@ -312,10 +327,46 @@ assert_safe_extra_args <- function(extra_args) {
   invisible(extra_args)
 }
 
+#' Strip trailing path separators while preserving POSIX "/" and Windows drive roots ("C:/")
+#' @noRd
+strip_trailing_sep <- function(path) {
+  if (identical(path, "/") || grepl("^[A-Za-z]:[/\\\\]?$", path, perl = TRUE)) {
+    return(path)
+  }
+  sub("[/\\\\]+$", "", path, perl = TRUE)
+}
+
+#' Canonicalize a path for cross-platform equality/prefix comparisons
+#' Expands Windows 8.3 short paths (e.g. RUNNER~1) via deepest existing ancestor and
+#' uses case-insensitive forward-slash form on Windows.
+#' @noRd
+canonical_compare_path <- function(path) {
+  p <- strip_trailing_sep(path)
+  if (file.exists(p) || dir.exists(p)) {
+    canon <- strip_trailing_sep(normalizePath(p, winslash = "/", mustWork = TRUE))
+    return(if (identical(.Platform$OS.type, "windows")) tolower(canon) else canon)
+  }
+  tail_parts <- character()
+  cur <- p
+  for (step in seq_len(64L)) {
+    parent <- dirname(cur)
+    if (identical(parent, cur)) break
+    tail_parts <- c(basename(cur), tail_parts)
+    cur <- strip_trailing_sep(parent)
+    if (file.exists(cur) || dir.exists(cur)) {
+      base_canon <- strip_trailing_sep(normalizePath(cur, winslash = "/", mustWork = TRUE))
+      joined <- if (length(tail_parts) > 0L) paste(c(base_canon, tail_parts), collapse = "/") else base_canon
+      return(if (identical(.Platform$OS.type, "windows")) tolower(joined) else joined)
+    }
+  }
+  canon <- strip_trailing_sep(normalizePath(p, winslash = "/", mustWork = FALSE))
+  if (identical(.Platform$OS.type, "windows")) tolower(canon) else canon
+}
+
 #' Check whether a path is a symbolic link
 #' @noRd
 is_symlink_path <- function(path) {
-  rl <- Sys.readlink(path)
+  rl <- suppressWarnings(Sys.readlink(path))
   !is.na(rl) && nzchar(rl)
 }
 
@@ -341,7 +392,7 @@ assert_safe_write_target <- function(path, root_dir = NULL, arg = "path") {
   }
 
   # Strip trailing slashes before symlink check (trailing slash dereferences dir symlinks on POSIX)
-  clean_path <- if (identical(path, "/")) "/" else sub("/+$", "", path)
+  clean_path <- strip_trailing_sep(path)
   if (is_symlink_path(clean_path)) {
     cli::cli_abort(
       "Refusing to write through symbolic link in {.arg {arg}}: {.path {clean_path}}.",
@@ -349,33 +400,31 @@ assert_safe_write_target <- function(path, root_dir = NULL, arg = "path") {
     )
   }
 
+  cmp_root <- if (!is.null(root_dir)) canonical_compare_path(root_dir) else NULL
+
   # Walk existing ancestor components to reject symlinked parent directories
   cur <- clean_path
   for (step in seq_len(64L)) {
     parent <- dirname(cur)
     if (identical(parent, cur)) break
-    parent_clean <- if (identical(parent, "/")) "/" else sub("/+$", "", parent)
+    parent_clean <- strip_trailing_sep(parent)
     if (is_symlink_path(parent_clean) && !is_macos_os_root_alias(parent_clean)) {
       cli::cli_abort(
         "Refusing to write through symlinked parent directory in {.arg {arg}}: {.path {parent_clean}}.",
         class = "airgap_security_error"
       )
     }
-    if (!is.null(root_dir)) {
-      canon_root <- normalizePath(root_dir, winslash = "/", mustWork = FALSE)
-      if (identical(parent_clean, sub("/+$", "", root_dir)) ||
-          identical(normalizePath(parent_clean, winslash = "/", mustWork = FALSE), canon_root)) {
-        break
-      }
+    if (!is.null(cmp_root) && identical(canonical_compare_path(parent_clean), cmp_root)) {
+      break
     }
     cur <- parent_clean
   }
 
   if (!is.null(root_dir)) {
-    canon_root <- normalizePath(root_dir, winslash = "/", mustWork = TRUE)
+    canon_root <- canonical_compare_path(root_dir)
     parent_dir <- dirname(clean_path)
     if (dir.exists(parent_dir)) {
-      canon_parent <- normalizePath(parent_dir, winslash = "/", mustWork = TRUE)
+      canon_parent <- canonical_compare_path(parent_dir)
       root_prefix <- if (endsWith(canon_root, "/")) canon_root else paste0(canon_root, "/")
       if (!identical(canon_parent, canon_root) && !startsWith(canon_parent, root_prefix)) {
         cli::cli_abort(
@@ -402,7 +451,7 @@ assert_path_confined <- function(target_path, root_dir = NULL, allow_symlinks = 
     )
   }
 
-  clean_target <- if (identical(target_path, "/")) "/" else sub("/+$", "", target_path)
+  clean_target <- strip_trailing_sep(target_path)
   if (!isTRUE(allow_symlinks) && is_symlink_path(clean_target)) {
     cli::cli_abort(
       "Symbolic link rejected under air-gap model integrity policy: {.path {clean_target}}.",
@@ -411,8 +460,8 @@ assert_path_confined <- function(target_path, root_dir = NULL, allow_symlinks = 
   }
 
   if (!is.null(root_dir)) {
-    canon_root <- normalizePath(root_dir, winslash = "/", mustWork = TRUE)
-    canon_target <- normalizePath(target_path, winslash = "/", mustWork = TRUE)
+    canon_root <- canonical_compare_path(root_dir)
+    canon_target <- canonical_compare_path(target_path)
     root_prefix <- if (endsWith(canon_root, "/")) canon_root else paste0(canon_root, "/")
     if (!identical(canon_target, canon_root) && !startsWith(canon_target, root_prefix)) {
       cli::cli_abort(
@@ -435,15 +484,14 @@ assert_path_confined <- function(target_path, root_dir = NULL, allow_symlinks = 
             class = "airgap_security_error"
           )
         }
-        if (identical(cur, sub("/+$", "", root_dir)) ||
-            identical(normalizePath(cur, winslash = "/", mustWork = FALSE), canon_root)) {
+        if (identical(canonical_compare_path(cur), canon_root)) {
           break
         }
         parent <- dirname(cur)
         if (identical(parent, cur)) {
           break
         }
-        cur <- parent
+        cur <- strip_trailing_sep(parent)
       }
     }
   } else if (!isTRUE(allow_symlinks)) {
@@ -452,7 +500,7 @@ assert_path_confined <- function(target_path, root_dir = NULL, allow_symlinks = 
     for (step in seq_len(64L)) {
       parent <- dirname(cur)
       if (identical(parent, cur)) break
-      parent_clean <- if (identical(parent, "/")) "/" else sub("/+$", "", parent)
+      parent_clean <- strip_trailing_sep(parent)
       if (is_symlink_path(parent_clean) && !is_macos_os_root_alias(parent_clean)) {
         cli::cli_abort(
           "Symbolic link parent directory rejected under air-gap model integrity policy: {.path {parent_clean}}.",

@@ -79,7 +79,9 @@ pii_name_stopwords <- function() {
     "sleep", "mood", "affect", "speech", "thought", "insight", "judgment",
     "orientation", "memory", "attention", "concentration", "appetite", "energy",
     "suicidal", "homicidal", "ideation", "safety", "crisis", "risk", "protective",
-    "factors", "coping", "skills", "goals", "homework", "exercise", "journal"
+    "factors", "coping", "skills", "goals", "homework", "exercise", "journal",
+    "windows", "server", "microsoft", "linux", "ubuntu", "debian", "fedora",
+    "macos", "centos", "kernel", "freebsd", "solaris", "enterprise"
   )
 }
 
@@ -1130,7 +1132,10 @@ pii_vault_save <- function(vault, path, key = NULL, encrypt = TRUE) {
   suppressWarnings(Sys.chmod(tmp_path, mode = "0600"))
   writeLines(as.character(out_text), con = tmp_path, useBytes = TRUE)
   suppressWarnings(Sys.chmod(tmp_path, mode = "0600"))
-  file.rename(tmp_path, path)
+  if (!isTRUE(suppressWarnings(file.rename(tmp_path, path)))) {
+    file.copy(tmp_path, path, overwrite = TRUE)
+    unlink(tmp_path)
+  }
   suppressWarnings(Sys.chmod(path, mode = "0600"))
   invisible(path)
 }
@@ -1328,8 +1333,7 @@ pii_vault_rotate_key <- function(
 
   assert_safe_write_target(out_path, arg = "out_path")
 
-  if (isTRUE(backup) && identical(normalizePath(path, winslash = "/", mustWork = FALSE),
-                                  normalizePath(out_path, winslash = "/", mustWork = FALSE))) {
+  if (isTRUE(backup) && identical(canonical_compare_path(path), canonical_compare_path(out_path))) {
     bak_path <- paste0(path, ".bak")
     assert_safe_write_target(bak_path, arg = "backup path")
     bak_tmp <- paste0(bak_path, ".tmp.", Sys.getpid())
@@ -1339,7 +1343,10 @@ pii_vault_rotate_key <- function(
     suppressWarnings(Sys.chmod(bak_tmp, mode = "0600"))
     writeBin(raw_src, con = bak_tmp)
     suppressWarnings(Sys.chmod(bak_tmp, mode = "0600"))
-    file.rename(bak_tmp, bak_path)
+    if (!isTRUE(suppressWarnings(file.rename(bak_tmp, bak_path)))) {
+      file.copy(bak_tmp, bak_path, overwrite = TRUE)
+      unlink(bak_tmp)
+    }
     suppressWarnings(Sys.chmod(bak_path, mode = "0600"))
   }
 

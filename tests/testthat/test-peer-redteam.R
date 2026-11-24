@@ -875,3 +875,85 @@ test_that("L-03: neutralize_prompt_delimiters neutralizes whitespace and attribu
   expect_false(grepl("<UNTRUSTED_RESEARCH_RECORD attr='1'>", sent, fixed = TRUE))
   expect_match(sent, "[ESCAPED_RECORD_TAG]", fixed = TRUE)
 })
+
+# ==============================================================================
+# CROSS-PLATFORM WINDOWS CI REGRESSIONS (v0.5.1)
+# ==============================================================================
+
+test_that("v0.5.1: Windows/Linux/macOS os_info strings pass audit & IRB packet while blocking smuggled PII", {
+  d <- withr::local_tempdir()
+  os_strings <- c(
+    "Windows Server 2022 x64 (build 20348) x86-64",
+    "Windows 10 x64 (build 22621) x86-64",
+    "Microsoft Windows 11 x64",
+    "Red Hat Enterprise Linux 9.4 x86_64",
+    "Rocky Linux 9.3 x86_64",
+    "Apple Darwin 23.6.0 arm64",
+    "Linux 6.8.0-1017-azure x86_64"
+  )
+
+  for (idx in seq_along(os_strings)) {
+    os_val <- os_strings[idx]
+    log_path <- file.path(d, sprintf("os_%d.jsonl", idx))
+    entry <- audit_log_append(
+      log_path,
+      list(
+        run_id = sprintf("run_os_%02d", idx),
+        os_info = os_val,
+        model_name = "llama3.1:8b-instruct-q4_K_M",
+        pii_policy = "redact",
+        isolation_status = "PASS",
+        row_counts = list(total = 2L, succeeded = 2L, failed = 0L)
+      )
+    )
+    expect_s3_class(entry, "airgap_audit_entry")
+    expect_true(audit_log_verify(log_path, strict = TRUE)$valid)
+
+    pkt_dir <- file.path(d, sprintf("pkt_os_%d", idx))
+    pkt <- export_irb_compliance_packet(
+      pkt_dir,
+      audit_log_path = log_path,
+      protocol_id = "IRB-2026-051",
+      overwrite = TRUE
+    )
+    expect_s3_class(pkt, "airgap_compliance_packet")
+    man <- jsonlite::fromJSON(file.path(pkt_dir, "packet_manifest.json"))
+    expect_true(isTRUE(man$zero_pii_verified))
+  }
+
+  # High-precision PII smuggled into os_info is still blocked
+  for (bad_os in c(
+    "Windows Server john.doe@clinic.org",
+    "Windows 10 SSN 123-45-6789",
+    "Windows Server MRN: 998877",
+    "Windows 10 (555) 234-5678",
+    "Windows Server 192.168.10.42"
+  )) {
+    expect_error(
+      audit_log_append(
+        file.path(d, "bad_os.jsonl"),
+        list(run_id = "run_bad_os", os_info = bad_os)
+      ),
+      class = "airgap_audit_privacy_error"
+    )
+  }
+
+  # Windows drive paths work cleanly with allow_windows_path = TRUE while blocking injection/traversal
+  expect_identical(
+    assert_safe_host_path("C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\pkt", forbid_colon = TRUE, allow_windows_path = TRUE),
+    "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\pkt"
+  )
+  expect_error(
+    assert_safe_host_path("C:\\Users\\RUNNER~1\\models:rw", forbid_colon = TRUE, allow_windows_path = TRUE),
+    class = "airgap_security_error"
+  )
+  expect_error(
+    assert_safe_host_path("C:\\Users\\RUNNER~1\\..\\secret", forbid_colon = TRUE, allow_windows_path = TRUE),
+    class = "airgap_security_error"
+  )
+  expect_error(
+    assert_safe_host_path("C:\\Users\\RUNNER~1\\models;id", forbid_colon = TRUE, allow_windows_path = TRUE),
+    class = "airgap_security_error"
+  )
+})
+

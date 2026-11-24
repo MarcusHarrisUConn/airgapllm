@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,7 @@
     <li><a class="dropdown-item" href="../articles/privacy-and-compliance.html">Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification</a></li>
     <li><a class="dropdown-item" href="../articles/irb-hipaa-compliance-walkthrough.html">IRB &amp; HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets</a></li>
     <li><a class="dropdown-item" href="../articles/hpc-gpu-deployment.html">HPC &amp; GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking</a></li>
+    <li><a class="dropdown-item" href="../articles/consensus-and-kanonymity.html">Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -174,15 +175,15 @@ file:</p>
 <span></span>
 <span><span class="co"># Pseudonymized text preserves coreference for Dr. Elena Vance across rows 1 &amp; 2</span></span>
 <span><span class="va">pse</span><span class="op">$</span><span class="va">text</span></span>
-<span><span class="co">#&gt; [1] "At &lt;&lt;CLINIC_fbd62becf7&gt;&gt; (&lt;&lt;COHORT_ID_f58a9ee231&gt;&gt;), &lt;&lt;PERSON_NAME_b2dfd1da51&gt;&gt; administered the Beck Depression Inventory."</span></span>
-<span><span class="co">#&gt; [2] "Follow-up with &lt;&lt;PERSON_NAME_b2dfd1da51&gt;&gt; at &lt;&lt;EMAIL_174cf50455&gt;&gt;; SSN &lt;&lt;SSN_aa3eace11b&gt;&gt; confirmed."                       </span></span>
+<span><span class="co">#&gt; [1] "At &lt;&lt;CLINIC_d2de9d36f9&gt;&gt; (&lt;&lt;COHORT_ID_dcc6c056e9&gt;&gt;), &lt;&lt;PERSON_NAME_ea8c8587c9&gt;&gt; administered the Beck Depression Inventory."</span></span>
+<span><span class="co">#&gt; [2] "Follow-up with &lt;&lt;PERSON_NAME_ea8c8587c9&gt;&gt; at &lt;&lt;EMAIL_ac8b8e9f3b&gt;&gt;; SSN &lt;&lt;SSN_b0fb655a09&gt;&gt; confirmed."                       </span></span>
 <span><span class="co">#&gt; [3] "Participant drank Dr. Pepper before session; Major Depressive Disorder symptoms stable."</span></span>
 <span></span>
 <span><span class="co"># Printing the vault NEVER exposes raw sensitive mappings</span></span>
 <span><span class="va">pse</span><span class="op">$</span><span class="va">vault</span></span>
 <span><span class="co">#&gt; &lt;airgap_pii_vault&gt; (sensitive mappings hidden)</span></span>
-<span><span class="co">#&gt;   Vault ID:        vault_20261124T193335Z_e0267396</span></span>
-<span><span class="co">#&gt;   Key fingerprint: 196c4760c212c4f7</span></span>
+<span><span class="co">#&gt;   Vault ID:        vault_20261124T210617Z_7f80e037</span></span>
+<span><span class="co">#&gt;   Key fingerprint: 53620bc0fed7ef4e</span></span>
 <span><span class="co">#&gt;   Stored tokens:   5</span></span>
 <span><span class="co">#&gt;   By entity type:  clinic=1, cohort_id=1, email=1, person_name=1, ssn=1</span></span></code></pre></div>
 <p>When authorized analysts need to restore original labels locally
@@ -267,22 +268,22 @@ resume seamlessly:</p>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $elapsed_sec</span></span>
-<span><span class="co">#&gt; [1] 0.006</span></span>
+<span><span class="co">#&gt; [1] 0.005</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $rows_per_sec</span></span>
-<span><span class="co">#&gt; [1] 833.33</span></span>
+<span><span class="co">#&gt; [1] 1000</span></span>
 <span><span class="va">resumed</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 8 × 8</span></span></span>
 <span><span class="co">#&gt;   doc_id  affect   stress social_support .status .attempts .error .elapsed_ms</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>       <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> EMA_001 positive      5 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               2</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> EMA_002 neutral       2 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> EMA_003 negative      3 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> EMA_004 positive      1 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               0</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> EMA_005 negative      5 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> EMA_001 neutral       2 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> EMA_002 negative      3 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> EMA_003 negative      2 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> EMA_004 negative      3 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> EMA_005 positive      3 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> EMA_006 positive      4 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span> EMA_007 positive      4 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">8</span> EMA_008 negative      1 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               0</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span> EMA_007 negative      3 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">8</span> EMA_008 positive      3 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               1</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="audit-chain-tamper-detection-zero-pii-guarantees">4. Audit Chain Tamper Detection &amp; Zero-PII Guarantees<a class="anchor" aria-label="anchor" href="#audit-chain-tamper-detection-zero-pii-guarantees"></a>
@@ -297,30 +298,30 @@ invalidates the cryptographic chain and is caught immediately by
 <span></span>
 <span><span class="fu"><a href="../reference/audit_log_append.html">audit_log_append</a></span><span class="op">(</span><span class="va">audit_file</span>, <span class="va">resumed</span>, metadata <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>site <span class="op">=</span> <span class="st">"Site-A"</span>, wave <span class="op">=</span> <span class="st">"Wave-1"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_entry&gt; #1 [extraction_run]</span></span>
-<span><span class="co">#&gt;   Run ID:       run_20261124T193335Z_aa928fd2</span></span>
-<span><span class="co">#&gt;   Timestamp:    2026-11-24T19:33:35Z</span></span>
+<span><span class="co">#&gt;   Run ID:       run_20261124T210617Z_af203687</span></span>
+<span><span class="co">#&gt;   Timestamp:    2026-11-24T21:06:17Z</span></span>
 <span><span class="co">#&gt;   Isolation:    PASS</span></span>
 <span><span class="co">#&gt;   PII policy:   redact</span></span>
 <span><span class="co">#&gt;   Prev hash:    GENESIS</span></span>
-<span><span class="co">#&gt;   Entry hash:   sha256:94e86c8946bbf4521e2b300797d74c7654b9da96e09628b97e9de8d9c3c96097</span></span>
+<span><span class="co">#&gt;   Entry hash:   sha256:05bc006bbd45666476635168827b4e5557e3ab7a8a48eea4f91f75c4b90c8e39</span></span>
 <span><span class="fu"><a href="../reference/audit_log_append.html">audit_log_append</a></span><span class="op">(</span></span>
 <span>  <span class="va">audit_file</span>,</span>
 <span>  <span class="fu"><a href="../reference/preflight_isolation_check.html">preflight_isolation_check</a></span><span class="op">(</span>endpoint <span class="op">=</span> <span class="st">"http://127.0.0.1:11434"</span><span class="op">)</span>,</span>
 <span>  metadata <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>site <span class="op">=</span> <span class="st">"Site-A"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_entry&gt; #2 [preflight_check]</span></span>
-<span><span class="co">#&gt;   Run ID:       preflight_20261124T193335Z_d9f3a7ce</span></span>
-<span><span class="co">#&gt;   Timestamp:    2026-11-24T19:33:35Z</span></span>
+<span><span class="co">#&gt;   Run ID:       preflight_20261124T210617Z_088bbeea</span></span>
+<span><span class="co">#&gt;   Timestamp:    2026-11-24T21:06:17Z</span></span>
 <span><span class="co">#&gt;   Isolation:    PASS</span></span>
 <span><span class="co">#&gt;   PII policy:   NA</span></span>
-<span><span class="co">#&gt;   Prev hash:    sha256:94e86c8946bbf4521</span></span>
-<span><span class="co">#&gt;   Entry hash:   sha256:a5a6a1ecfa1def17b6561b37f1034cef1a168925c3c441c351c2ed3975a1c15b</span></span>
+<span><span class="co">#&gt;   Prev hash:    sha256:05bc006bbd4566647</span></span>
+<span><span class="co">#&gt;   Entry hash:   sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236</span></span>
 <span></span>
 <span><span class="co"># Clean ledger verifies as VALID</span></span>
 <span><span class="fu"><a href="../reference/audit_log_verify.html">audit_log_verify</a></span><span class="op">(</span><span class="va">audit_file</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_verification&gt; [VALID]</span></span>
 <span><span class="co">#&gt;   Entries verified: 2</span></span>
-<span><span class="co">#&gt;   Chain head hash:  sha256:a5a6a1ecfa1def17b6561b37f1034cef1a168925c3c441c351c2ed3975a1c15b</span></span>
+<span><span class="co">#&gt;   Chain head hash:  sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236</span></span>
 <span></span>
 <span><span class="co"># Simulate post-hoc tampering on line 1</span></span>
 <span><span class="va">tampered_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".tampered.jsonl"</span><span class="op">)</span></span>
@@ -331,9 +332,9 @@ invalidates the cryptographic chain and is caught immediately by
 <span><span class="fu"><a href="../reference/audit_log_verify.html">audit_log_verify</a></span><span class="op">(</span><span class="va">tampered_file</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_verification&gt; [TAMPERED / INVALID]</span></span>
 <span><span class="co">#&gt;   Entries verified: 2</span></span>
-<span><span class="co">#&gt;   Chain head hash:  sha256:a5a6a1ecfa1def17b6561b37f1034cef1a168925c3c441c351c2ed3975a1c15b</span></span>
+<span><span class="co">#&gt;   Chain head hash:  sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236</span></span>
 <span><span class="co">#&gt;   First invalid:    line 1</span></span>
-<span><span class="co">#&gt;   [!] Line 1: Hash mismatch (tampered entry): stored sha256:94e86c8946bbf4521e2b300797d74c7654b9da96e09628b97e9de8d9c3c96097 != computed sha256:30d038541827d29ee3076639f1a7cbe992d7d78fda43ede91b690bf58ed2b1e9.</span></span></code></pre></div>
+<span><span class="co">#&gt;   [!] Line 1: Hash mismatch (tampered entry): stored sha256:05bc006bbd45666476635168827b4e5557e3ab7a8a48eea4f91f75c4b90c8e39 != computed sha256:8635f62eab7c3725e9b6a670b06634e51c75ceda9921e35a752ae1013b2e022e.</span></span></code></pre></div>
 <p>Attempting to write raw text keys or PII into an audit log is
 rejected before touching disk:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">

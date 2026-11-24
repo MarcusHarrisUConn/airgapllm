@@ -21,7 +21,7 @@ packet is scanned for accidental raw PII before sealing."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@ packet is scanned for accidental raw PII before sealing."></head><body>
     <li><a class="dropdown-item" href="../articles/privacy-and-compliance.html">Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification</a></li>
     <li><a class="dropdown-item" href="../articles/irb-hipaa-compliance-walkthrough.html">IRB &amp; HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets</a></li>
     <li><a class="dropdown-item" href="../articles/hpc-gpu-deployment.html">HPC &amp; GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking</a></li>
+    <li><a class="dropdown-item" href="../articles/consensus-and-kanonymity.html">Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-pdfs" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">PDFs</button>
@@ -97,8 +98,8 @@ compliance packet.</p></dd>
 
 
 <dt id="arg-extraction">extraction<a class="anchor" aria-label="anchor" href="#arg-extraction"></a></dt>
-<dd><p>Optional <code>airgap_extraction</code> result from
-<code><a href="airgap_extract.html">airgap_extract()</a></code>.</p></dd>
+<dd><p>Optional <code>airgap_extraction</code> or <code>airgap_consensus</code> result
+from <code><a href="airgap_extract.html">airgap_extract()</a></code> or <code><a href="airgap_extract_consensus.html">airgap_extract_consensus()</a></code>.</p></dd>
 
 
 <dt id="arg-audit-log-path">audit_log_path<a class="anchor" aria-label="anchor" href="#arg-audit-log-path"></a></dt>
@@ -165,10 +166,10 @@ a non-empty <code>out_dir</code>.</p></dd>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">pkt</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;airgap_compliance_packet&gt; [AUDIT: VERIFIED]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   Directory:     /tmp/RtmpYgqorT/demo_irb_packet</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Directory:     /tmp/RtmpcmtWIm/demo_irb_packet</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Artifacts:     4 file(s) + packet_manifest.json</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   Audit head:    sha256:de4d6262e0a35523ce47d067f807d3b515bec979e5fcf12509a6634ab31a3fd0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   Packet digest: sha256:9f0b00f0c76878284d0c8ec1780b5666ffa5fc0aa33d86046b3e15e61f2354a2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Audit head:    sha256:36a3643329f3efc45a49987057c571f3603af3671943c7c6dc97e27916074d46</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Packet digest: sha256:678ff1f7e453a265cf54106e69f9b27d11af2da054b8745c082c9b48c5f7fd1e</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">pkt_dir</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 </code></pre></div>
     </div>

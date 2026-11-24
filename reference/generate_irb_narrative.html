@@ -17,7 +17,7 @@ redaction counts."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -32,6 +32,7 @@ redaction counts."></head><body>
     <li><a class="dropdown-item" href="../articles/privacy-and-compliance.html">Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification</a></li>
     <li><a class="dropdown-item" href="../articles/irb-hipaa-compliance-walkthrough.html">IRB &amp; HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets</a></li>
     <li><a class="dropdown-item" href="../articles/hpc-gpu-deployment.html">HPC &amp; GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking</a></li>
+    <li><a class="dropdown-item" href="../articles/consensus-and-kanonymity.html">Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-pdfs" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">PDFs</button>
@@ -142,11 +143,11 @@ cryptographic provenance &amp; aggregate PII redaction table. Defaults to
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> - **Protocol ID:** IRB-2026-001</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> - **Regulatory Scope:** HIPAA / IRB</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> - **Run ID:** `run_20261124T193324Z_60795f24` (2026-11-24T19:33:24Z)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> - **Run ID:** `run_20261124T210604Z_95eaa4e4` (2026-11-24T21:06:04Z)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> ### 1. Offline Local AI Execution &amp; Network Isolation</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> All automated natural language processing was executed strictly offline using `airgapllm` (v0.3.0, R 4.6.2) with **zero transmission of research data to external cloud APIs or third-party servers**. Inference was configured for local execution (`backend = "mock"`, endpoint class: `offline_mock`) under hardened container controls (`network_mode = "none"`, read-only root filesystem, all Linux capabilities dropped, `no-new-privileges`, read-only model volume mounts, and offline telemetry suppression). Automated pre-flight isolation checks (`preflight_isolation_check()`) returned **`PASS`** (attestation hash: `sha256:0a3bfa987000101d82bf09e21a2d66d6f945bd18ff95078fa0e3ebd2599d34b5`), confirming strict local/loopback confinement and proxy bypass prior to reading participant text.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> All automated natural language processing was executed strictly offline using `airgapllm` (v0.5.0, R 4.6.2) with **zero transmission of research data to external cloud APIs or third-party servers**. Inference was configured for local execution (`backend = "mock"`, endpoint class: `offline_mock`) under hardened container controls (`network_mode = "none"`, read-only root filesystem, all Linux capabilities dropped, `no-new-privileges`, read-only model volume mounts, and offline telemetry suppression). Automated pre-flight isolation checks (`preflight_isolation_check()`) returned **`PASS`** (attestation hash: `sha256:8fe5ce53f979b2a891a7834d9744b61ee067e3b8949e0b14b82b56c6e4729c5b`), confirming strict local/loopback confinement and proxy bypass prior to reading participant text.</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> ### 2. Pre-Inference De-Identification &amp; Privacy Safeguards</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
@@ -166,7 +167,7 @@ cryptographic provenance &amp; aggregate PII redaction table. Defaults to
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> | Control / Artifact | Verified Value |</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> | :--- | :--- |</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> | Isolation Pre-Flight Status | `PASS` (`sha256:0a3bfa987000101d82bf09e21a2d66d6f945bd18ff95078fa0e3ebd2599d34b5`) |</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> | Isolation Pre-Flight Status | `PASS` (`sha256:8fe5ce53f979b2a891a7834d9744b61ee067e3b8949e0b14b82b56c6e4729c5b`) |</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> | Endpoint Class | `offline_mock` |</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> | Container Backend / Network | `mock` / `none` |</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> | Container Image Digest | `not pinned` |</span>
@@ -179,7 +180,7 @@ cryptographic provenance &amp; aggregate PII redaction table. Defaults to
 <span class="r-out co"><span class="r-pr">#&gt;</span> | Pre-Inference PII Policy | `redact` (`1` detections) |</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> | Rows Processed (OK / Failed) | `2` (`2` / `0`) |</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> | Audit Chain Head Hash | `N/A` |</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> | Software Environment | `airgapllm 0.3.0` / `R 4.6.2` |</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> | Software Environment | `airgapllm 0.5.0` / `R 4.6.2` |</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> #### Aggregate Pre-Inference PII Redaction Counts (Zero Raw Values Stored)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>

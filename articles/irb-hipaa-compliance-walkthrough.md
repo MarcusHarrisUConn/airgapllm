@@ -164,8 +164,8 @@ pse <- pii_pseudonymize(
 )
 pse$vault
 #> <airgap_pii_vault> (sensitive mappings hidden)
-#>   Vault ID:        vault_20261124T193333Z_b580f1ed
-#>   Key fingerprint: 640b2c4def57a270
+#>   Vault ID:        vault_20261124T210615Z_b27770cb
+#>   Key fingerprint: a37632e0281213ee
 #>   Stored tokens:   12
 #>   By entity type:  age_over_89=2, date=2, email=1, mrn_id=1, person_name=2, phone=1, ssn=1, street_address=1, zip_code=1
 
@@ -174,13 +174,13 @@ key_wave2 <- pii_vault_key()
 rot <- pii_vault_rotate_key(vault_path, old_key = key_wave1, new_key = key_wave2)
 rot[c("vault_id", "old_key_fingerprint", "new_key_fingerprint", "n_tokens")]
 #> $vault_id
-#> [1] "vault_20261124T193333Z_b580f1ed"
+#> [1] "vault_20261124T210615Z_b27770cb"
 #> 
 #> $old_key_fingerprint
-#> [1] "640b2c4def57a270"
+#> [1] "a37632e0281213ee"
 #> 
 #> $new_key_fingerprint
-#> [1] "09011f56d8951bcc"
+#> [1] "96f970475ebaa1ea"
 #> 
 #> $n_tokens
 #> [1] 12
@@ -242,18 +242,18 @@ extracted[, c("note_id", "sentiment", "severity", "crisis_flag", ".status", ".at
 #> # A tibble: 8 × 6
 #>   note_id sentiment severity crisis_flag .status .attempts
 #>   <chr>   <chr>        <int> <lgl>       <chr>       <int>
-#> 1 SYN_001 negative         2 TRUE        ok              1
-#> 2 SYN_002 neutral          3 FALSE       ok              1
-#> 3 SYN_003 neutral          9 TRUE        ok              1
-#> 4 SYN_004 negative         1 TRUE        ok              1
-#> 5 SYN_005 neutral          6 TRUE        ok              1
-#> 6 SYN_006 positive         3 TRUE        ok              1
-#> 7 SYN_007 negative         8 TRUE        ok              1
+#> 1 SYN_001 negative         7 TRUE        ok              1
+#> 2 SYN_002 neutral          8 TRUE        ok              1
+#> 3 SYN_003 negative         9 FALSE       ok              1
+#> 4 SYN_004 positive         5 FALSE       ok              1
+#> 5 SYN_005 neutral          2 FALSE       ok              1
+#> 6 SYN_006 neutral          9 TRUE        ok              1
+#> 7 SYN_007 neutral          9 FALSE       ok              1
 #> 8 SYN_008 neutral          2 TRUE        ok              1
 audit_log_verify(audit_path)
 #> <airgap_audit_verification> [VALID]
 #>   Entries verified: 1
-#>   Chain head hash:  sha256:acfde934d372e506c470473cdf11245f8da45d54508ad78dacbc227ee90a9c2f
+#>   Chain head hash:  sha256:1159f9885d5e16e6e8bc69f28e18c105b5c5349abe76f7c2c9a1d2ef3f1d3f41
 ```
 
 ## Step 5: Export a Self-Contained, SHA-256-Sealed IRB Compliance Packet
@@ -281,19 +281,19 @@ pkt <- export_irb_compliance_packet(
 
 pkt
 #> <airgap_compliance_packet> [AUDIT: VERIFIED]
-#>   Directory:     /tmp/RtmpQBfUqL/airgap_irb_walkthrough_1be14bb745bb/irb_submission_packet
+#>   Directory:     /tmp/RtmpdWPEwd/airgap_irb_walkthrough_1c0f183926a4/irb_submission_packet
 #>   Artifacts:     7 file(s) + packet_manifest.json
-#>   Audit head:    sha256:acfde934d372e506c470473cdf11245f8da45d54508ad78dacbc227ee90a9c2f
-#>   Packet digest: sha256:48f015e0f6521f128e4912594f62c7394de7fe157fd6b207963bca67c765313f
+#>   Audit head:    sha256:1159f9885d5e16e6e8bc69f28e18c105b5c5349abe76f7c2c9a1d2ef3f1d3f41
+#>   Packet digest: sha256:362bf3958ba9c57cba1ebb53bfa71abe534f691b03edee75859136f8259e00e1
 pkt$files
 #> # A tibble: 7 × 3
 #>   file                       size_bytes sha256                                  
 #>   <chr>                           <dbl> <chr>                                   
-#> 1 audit_log.jsonl                  1517 sha256:dcab252d7e74941d77e71255fb5c966f…
-#> 2 container_apptainer.def          1040 sha256:1121a86a7db34f42626ece1739990ced…
-#> 3 container_docker_run.sh           637 sha256:f7dc3bda6cbdcf32f013cd1e7dcf006d…
-#> 4 docker-compose.yml                945 sha256:3139438e9d26d73dbe38b0a974059b18…
-#> 5 irb_protocol_narrative.md        5121 sha256:79fc756066472041ab91cbe441469ed6…
-#> 6 irb_protocol_narrative.qmd       5268 sha256:09a6879ede3ec163a595061ea18645fc…
-#> 7 preflight_attestation.json       2107 sha256:59c991c61018e641dcce5200b4ca9b05…
+#> 1 audit_log.jsonl                  1517 sha256:ad6f87dcc98de29c2e6ab81bdda73d20…
+#> 2 container_apptainer.def          1040 sha256:61a6ca380ff83053d14fcaf7d9dc0662…
+#> 3 container_docker_run.sh           637 sha256:2b3ab3d7a24bf52996d8ee38e2a57f2a…
+#> 4 docker-compose.yml                945 sha256:ec990ca6dfb4fa49445a52ce91658b92…
+#> 5 irb_protocol_narrative.md        5121 sha256:020f59db2788ef4e574227cd27c9d898…
+#> 6 irb_protocol_narrative.qmd       5268 sha256:a4772ba962e0d7936798f1652a322dec…
+#> 7 preflight_attestation.json       2327 sha256:ab04fa12af319c8a72eab30d98356874…
 ```

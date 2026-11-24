@@ -7,7 +7,7 @@ FERPA protocols.
 
 ## Core Architectural Pillars
 
-- Air-Gapped Container Lifecycle Manager:
+- Air-Gapped Container Lifecycle, Hardware Sizing & Benchmarking:
 
   [`airgap_container_spec()`](https://marcusharrisphd.com/airgapllm/reference/airgap_container_spec.md),
   [`emit_docker_run()`](https://marcusharrisphd.com/airgapllm/reference/emit_docker_run.md),
@@ -16,10 +16,12 @@ FERPA protocols.
   [`verify_model_digest()`](https://marcusharrisphd.com/airgapllm/reference/verify_model_digest.md),
   [`is_loopback_endpoint()`](https://marcusharrisphd.com/airgapllm/reference/is_loopback_endpoint.md),
   [`preflight_isolation_check()`](https://marcusharrisphd.com/airgapllm/reference/preflight_isolation_check.md),
+  [`estimate_vram_requirements()`](https://marcusharrisphd.com/airgapllm/reference/estimate_vram_requirements.md),
+  [`recommend_runtime_config()`](https://marcusharrisphd.com/airgapllm/reference/recommend_runtime_config.md),
   and
-  [`estimate_vram_requirements()`](https://marcusharrisphd.com/airgapllm/reference/estimate_vram_requirements.md).
+  [`benchmark_local_runtime()`](https://marcusharrisphd.com/airgapllm/reference/benchmark_local_runtime.md).
 
-- Pre-Inference Privacy & PII Engine:
+- Pre-Inference Privacy, PII & k-Anonymity Engine:
 
   [`pii_default_entities()`](https://marcusharrisphd.com/airgapllm/reference/pii_default_entities.md),
   [`hipaa_restricted_zip3()`](https://marcusharrisphd.com/airgapllm/reference/hipaa_restricted_zip3.md),
@@ -33,10 +35,12 @@ FERPA protocols.
   [`pii_reidentify()`](https://marcusharrisphd.com/airgapllm/reference/pii_reidentify.md),
   [`pii_vault_save()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_save.md),
   [`pii_vault_load()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_load.md),
+  [`pii_vault_rotate_key()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_rotate_key.md),
+  [`assess_reidentification_risk()`](https://marcusharrisphd.com/airgapllm/reference/assess_reidentification_risk.md),
   and
-  [`pii_vault_rotate_key()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_rotate_key.md).
+  [`apply_k_anonymity()`](https://marcusharrisphd.com/airgapllm/reference/apply_k_anonymity.md).
 
-- Resumable Schema-Enforced Batch Extractor:
+- Resumable Schema-Enforced & Consensus Batch Extractor:
 
   [`chunk_clinical_texts()`](https://marcusharrisphd.com/airgapllm/reference/chunk_clinical_texts.md),
   [`schema_field()`](https://marcusharrisphd.com/airgapllm/reference/schema_field.md),
@@ -48,6 +52,9 @@ FERPA protocols.
   [`runtime_openai_local()`](https://marcusharrisphd.com/airgapllm/reference/runtime_openai_local.md),
   [`runtime_mock()`](https://marcusharrisphd.com/airgapllm/reference/runtime_mock.md),
   [`airgap_extract()`](https://marcusharrisphd.com/airgapllm/reference/airgap_extract.md),
+  [`airgap_extract_consensus()`](https://marcusharrisphd.com/airgapllm/reference/airgap_extract_consensus.md),
+  [`consensus_passes()`](https://marcusharrisphd.com/airgapllm/reference/consensus_accessors.md),
+  [`consensus_diagnostics()`](https://marcusharrisphd.com/airgapllm/reference/consensus_accessors.md),
   and
   [`extraction_manifest()`](https://marcusharrisphd.com/airgapllm/reference/extraction_accessors.md).
 

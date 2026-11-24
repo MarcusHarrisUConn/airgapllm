@@ -234,6 +234,6 @@ res
 #> # A tibble: 2 × 7
 #>   note_id severity score .status .attempts .error .elapsed_ms
 #>   <chr>   <chr>    <int> <chr>       <int> <chr>        <dbl>
-#> 1 N1      moderate     0 ok              1 NA               2
-#> 2 N2      moderate     3 ok              1 NA               1
+#> 1 N1      severe      10 ok              1 NA               2
+#> 2 N2      mild         2 ok              1 NA               1
 ```

@@ -13,7 +13,7 @@ zero external API leakage.
 
 ## Core Pillars
 
-1.  **Air-Gapped Container Lifecycle & GPU Sizing**
+1.  **Air-Gapped Container Lifecycle, Hardware Sizing & Benchmarking**
     - [`airgap_container_spec()`](https://marcusharrisphd.com/airgapllm/reference/airgap_container_spec.md),
       [`emit_docker_run()`](https://marcusharrisphd.com/airgapllm/reference/emit_docker_run.md),
       [`emit_docker_compose()`](https://marcusharrisphd.com/airgapllm/reference/emit_docker_compose.md),
@@ -35,11 +35,14 @@ zero external API leakage.
       reject SSRF/non-loopback/spoofed URLs, fail closed on unbypassed
       outbound proxy env vars, and emit a cryptographically hashed (and
       optionally HMAC-signed) attestation record.
-    - [`estimate_vram_requirements()`](https://marcusharrisphd.com/airgapllm/reference/estimate_vram_requirements.md)
-      right-sizes workstation and HPC GPU memory across quantizations
-      (`Q4_K_M`, `Q6_K`, `Q8_0`, `FP16`), context lengths, and batch
-      sizes.
-2.  **Pre-Inference Privacy, PII & HIPAA Safe Harbor Engine**
+    - [`estimate_vram_requirements()`](https://marcusharrisphd.com/airgapllm/reference/estimate_vram_requirements.md),
+      [`recommend_runtime_config()`](https://marcusharrisphd.com/airgapllm/reference/recommend_runtime_config.md),
+      and
+      [`benchmark_local_runtime()`](https://marcusharrisphd.com/airgapllm/reference/benchmark_local_runtime.md)
+      right-size workstation and HPC GPUs, auto-tune
+      quantization/batch/context settings, and benchmark throughput,
+      p50/p95 latency, retry rates, and projected corpus ETA.
+2.  **Pre-Inference Privacy, PII & k-Anonymity Risk Engine**
     - [`pii_config()`](https://marcusharrisphd.com/airgapllm/reference/pii_config.md),
       [`pii_detect()`](https://marcusharrisphd.com/airgapllm/reference/pii_detect.md),
       [`pii_redact()`](https://marcusharrisphd.com/airgapllm/reference/pii_redact.md),
@@ -68,7 +71,14 @@ zero external API leakage.
       with per-save random salts, fresh IVs, AAD binding, constant-time
       MAC verification, and atomic key rotation) local vault with
       owner-only (`0600`) permissions.
-3.  **Resumable Schema-Enforced Batch Extractor**
+    - [`assess_reidentification_risk()`](https://marcusharrisphd.com/airgapllm/reference/assess_reidentification_risk.md)
+      and
+      [`apply_k_anonymity()`](https://marcusharrisphd.com/airgapllm/reference/apply_k_anonymity.md)
+      audit quasi-identifiers for $`k`$-anonymity, prosecutor/journalist
+      re-identification risk, and $`l`$-diversity, enforcing safe row
+      suppression or progressive rare-class masking prior to table
+      export.
+3.  **Resumable Schema-Enforced & Multi-Pass Consensus Batch Extractor**
     - [`chunk_clinical_texts()`](https://marcusharrisphd.com/airgapllm/reference/chunk_clinical_texts.md)
       splits long therapy transcripts and interviews into deterministic
       paragraph- or sentence-aligned overlapping chunks preserving
@@ -90,6 +100,14 @@ zero external API leakage.
       ([`build_repair_prompt()`](https://marcusharrisphd.com/airgapllm/reference/build_repair_prompt.md)),
       and crash-resumable atomic per-row JSONL checkpointing with
       schema/prompt compatibility guards.
+    - [`airgap_extract_consensus()`](https://marcusharrisphd.com/airgapllm/reference/airgap_extract_consensus.md),
+      [`consensus_passes()`](https://marcusharrisphd.com/airgapllm/reference/consensus_accessors.md),
+      and
+      [`consensus_diagnostics()`](https://marcusharrisphd.com/airgapllm/reference/consensus_accessors.md)
+      run multi-seed / multi-prompt self-consistency consensus
+      extractions with majority vote or median/trimmed-mean aggregation,
+      per-row agreement scores, and long-format pass tables directly
+      compatible with multi-facet psychometric reliability auditing.
     - Pluggable strictly-local runtimes:
       [`runtime_ollama()`](https://marcusharrisphd.com/airgapllm/reference/runtime_ollama.md),
       [`runtime_openai_local()`](https://marcusharrisphd.com/airgapllm/reference/runtime_openai_local.md)
@@ -186,9 +204,10 @@ export_irb_compliance_packet(
 ## Documentation & Guides
 
 - **Website & Reference:** <https://marcusharrisphd.com/airgapllm/>
-- **Security Audit:** See
+- **Security Audits:** See
   [SECURITY.md](https://marcusharrisphd.com/airgapllm/SECURITY.md) for
-  the v0.2.0 adversarial red-team audit, SSRF/injection mitigations, and
+  the v0.2.0 and v0.5.0 adversarial red-team audits,
+  SSRF/injection/symlink mitigations, zero-PII packet verification, and
   cryptographic vault specification.
 - **Architecture:** See
   [ARCHITECTURE.md](https://marcusharrisphd.com/airgapllm/ARCHITECTURE.md)
@@ -199,6 +218,7 @@ export_irb_compliance_packet(
   - [`vignette("privacy-and-compliance", package = "airgapllm")`](https://marcusharrisphd.com/airgapllm/articles/privacy-and-compliance.md)
   - [`vignette("irb-hipaa-compliance-walkthrough", package = "airgapllm")`](https://marcusharrisphd.com/airgapllm/articles/irb-hipaa-compliance-walkthrough.md)
   - [`vignette("hpc-gpu-deployment", package = "airgapllm")`](https://marcusharrisphd.com/airgapllm/articles/hpc-gpu-deployment.md)
+  - [`vignette("consensus-and-kanonymity", package = "airgapllm")`](https://marcusharrisphd.com/airgapllm/articles/consensus-and-kanonymity.md)
 
 ## License
 

@@ -97,15 +97,15 @@ pse <- pii_pseudonymize(
 
 # Pseudonymized text preserves coreference for Dr. Elena Vance across rows 1 & 2
 pse$text
-#> [1] "At <<CLINIC_fbd62becf7>> (<<COHORT_ID_f58a9ee231>>), <<PERSON_NAME_b2dfd1da51>> administered the Beck Depression Inventory."
-#> [2] "Follow-up with <<PERSON_NAME_b2dfd1da51>> at <<EMAIL_174cf50455>>; SSN <<SSN_aa3eace11b>> confirmed."                       
+#> [1] "At <<CLINIC_d2de9d36f9>> (<<COHORT_ID_dcc6c056e9>>), <<PERSON_NAME_ea8c8587c9>> administered the Beck Depression Inventory."
+#> [2] "Follow-up with <<PERSON_NAME_ea8c8587c9>> at <<EMAIL_ac8b8e9f3b>>; SSN <<SSN_b0fb655a09>> confirmed."                       
 #> [3] "Participant drank Dr. Pepper before session; Major Depressive Disorder symptoms stable."
 
 # Printing the vault NEVER exposes raw sensitive mappings
 pse$vault
 #> <airgap_pii_vault> (sensitive mappings hidden)
-#>   Vault ID:        vault_20261124T193335Z_e0267396
-#>   Key fingerprint: 196c4760c212c4f7
+#>   Vault ID:        vault_20261124T210617Z_7f80e037
+#>   Key fingerprint: 53620bc0fed7ef4e
 #>   Stored tokens:   5
 #>   By entity type:  clinic=1, cohort_id=1, email=1, person_name=1, ssn=1
 ```
@@ -200,22 +200,22 @@ extraction_throughput(resumed)
 #> [1] 0
 #> 
 #> $elapsed_sec
-#> [1] 0.006
+#> [1] 0.005
 #> 
 #> $rows_per_sec
-#> [1] 833.33
+#> [1] 1000
 resumed
 #> # A tibble: 8 × 8
 #>   doc_id  affect   stress social_support .status .attempts .error .elapsed_ms
 #>   <chr>   <chr>     <int> <lgl>          <chr>       <int> <chr>        <dbl>
-#> 1 EMA_001 positive      5 TRUE           ok              1 NA               2
-#> 2 EMA_002 neutral       2 FALSE          ok              1 NA               0
-#> 3 EMA_003 negative      3 FALSE          ok              1 NA               0
-#> 4 EMA_004 positive      1 TRUE           ok              1 NA               0
-#> 5 EMA_005 negative      5 FALSE          ok              1 NA               1
+#> 1 EMA_001 neutral       2 FALSE          ok              1 NA               2
+#> 2 EMA_002 negative      3 TRUE           ok              1 NA               1
+#> 3 EMA_003 negative      2 TRUE           ok              1 NA               1
+#> 4 EMA_004 negative      3 FALSE          ok              1 NA               1
+#> 5 EMA_005 positive      3 TRUE           ok              1 NA               1
 #> 6 EMA_006 positive      4 FALSE          ok              1 NA               1
-#> 7 EMA_007 positive      4 FALSE          ok              1 NA               1
-#> 8 EMA_008 negative      1 TRUE           ok              1 NA               0
+#> 7 EMA_007 negative      3 TRUE           ok              1 NA               1
+#> 8 EMA_008 positive      3 FALSE          ok              1 NA               1
 ```
 
 ## 4. Audit Chain Tamper Detection & Zero-PII Guarantees
@@ -233,30 +233,30 @@ audit_file <- tempfile(fileext = ".audit.jsonl")
 
 audit_log_append(audit_file, resumed, metadata = list(site = "Site-A", wave = "Wave-1"))
 #> <airgap_audit_entry> #1 [extraction_run]
-#>   Run ID:       run_20261124T193335Z_aa928fd2
-#>   Timestamp:    2026-11-24T19:33:35Z
+#>   Run ID:       run_20261124T210617Z_af203687
+#>   Timestamp:    2026-11-24T21:06:17Z
 #>   Isolation:    PASS
 #>   PII policy:   redact
 #>   Prev hash:    GENESIS
-#>   Entry hash:   sha256:94e86c8946bbf4521e2b300797d74c7654b9da96e09628b97e9de8d9c3c96097
+#>   Entry hash:   sha256:05bc006bbd45666476635168827b4e5557e3ab7a8a48eea4f91f75c4b90c8e39
 audit_log_append(
   audit_file,
   preflight_isolation_check(endpoint = "http://127.0.0.1:11434"),
   metadata = list(site = "Site-A")
 )
 #> <airgap_audit_entry> #2 [preflight_check]
-#>   Run ID:       preflight_20261124T193335Z_d9f3a7ce
-#>   Timestamp:    2026-11-24T19:33:35Z
+#>   Run ID:       preflight_20261124T210617Z_088bbeea
+#>   Timestamp:    2026-11-24T21:06:17Z
 #>   Isolation:    PASS
 #>   PII policy:   NA
-#>   Prev hash:    sha256:94e86c8946bbf4521
-#>   Entry hash:   sha256:a5a6a1ecfa1def17b6561b37f1034cef1a168925c3c441c351c2ed3975a1c15b
+#>   Prev hash:    sha256:05bc006bbd4566647
+#>   Entry hash:   sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236
 
 # Clean ledger verifies as VALID
 audit_log_verify(audit_file)
 #> <airgap_audit_verification> [VALID]
 #>   Entries verified: 2
-#>   Chain head hash:  sha256:a5a6a1ecfa1def17b6561b37f1034cef1a168925c3c441c351c2ed3975a1c15b
+#>   Chain head hash:  sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236
 
 # Simulate post-hoc tampering on line 1
 tampered_file <- tempfile(fileext = ".tampered.jsonl")
@@ -267,9 +267,9 @@ writeLines(lines, tampered_file)
 audit_log_verify(tampered_file)
 #> <airgap_audit_verification> [TAMPERED / INVALID]
 #>   Entries verified: 2
-#>   Chain head hash:  sha256:a5a6a1ecfa1def17b6561b37f1034cef1a168925c3c441c351c2ed3975a1c15b
+#>   Chain head hash:  sha256:bfa119f599cb97b149a59c87c02ff93c0d6e6644342fe357fa75846f21726236
 #>   First invalid:    line 1
-#>   [!] Line 1: Hash mismatch (tampered entry): stored sha256:94e86c8946bbf4521e2b300797d74c7654b9da96e09628b97e9de8d9c3c96097 != computed sha256:30d038541827d29ee3076639f1a7cbe992d7d78fda43ede91b690bf58ed2b1e9.
+#>   [!] Line 1: Hash mismatch (tampered entry): stored sha256:05bc006bbd45666476635168827b4e5557e3ab7a8a48eea4f91f75c4b90c8e39 != computed sha256:8635f62eab7c3725e9b6a670b06634e51c75ceda9921e35a752ae1013b2e022e.
 ```
 
 Attempting to write raw text keys or PII into an audit log is rejected

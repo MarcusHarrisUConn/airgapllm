@@ -13,7 +13,7 @@ digest."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -28,6 +28,7 @@ digest."></head><body>
     <li><a class="dropdown-item" href="../articles/privacy-and-compliance.html">Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification</a></li>
     <li><a class="dropdown-item" href="../articles/irb-hipaa-compliance-walkthrough.html">IRB &amp; HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets</a></li>
     <li><a class="dropdown-item" href="../articles/hpc-gpu-deployment.html">HPC &amp; GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking</a></li>
+    <li><a class="dropdown-item" href="../articles/consensus-and-kanonymity.html">Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-pdfs" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">PDFs</button>
@@ -118,7 +119,7 @@ symbolic links encountered at <code>path</code> or inside a model directory.</p>
 <span class="r-in"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu">verify_model_digest</span><span class="op">(</span><span class="va">tmp_model</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">verify_model_digest</span><span class="op">(</span><span class="va">tmp_model</span>, expected_digest <span class="op">=</span> <span class="va">res</span><span class="op">$</span><span class="va">actual_digest</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;airgap_digest_verification&gt; [MATCHED]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   Path:       /tmp/RtmpYgqorT/file182210afdc50.gguf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Path:       /tmp/RtmpcmtWIm/file17cf315e67b8.gguf</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Size bytes: 20</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Actual:     sha256:2a1762b7ed43674195cebce6e770011d1738919f1c866411ab76ab2de9b07aa1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Expected:   sha256:2a1762b7ed43674195cebce6e770011d1738919f1c866411ab76ab2de9b07aa1</span>

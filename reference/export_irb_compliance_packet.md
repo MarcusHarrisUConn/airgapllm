@@ -35,8 +35,10 @@ export_irb_compliance_packet(
 
 - extraction:
 
-  Optional `airgap_extraction` result from
-  [`airgap_extract()`](https://marcusharrisphd.com/airgapllm/reference/airgap_extract.md).
+  Optional `airgap_extraction` or `airgap_consensus` result from
+  [`airgap_extract()`](https://marcusharrisphd.com/airgapllm/reference/airgap_extract.md)
+  or
+  [`airgap_extract_consensus()`](https://marcusharrisphd.com/airgapllm/reference/airgap_extract_consensus.md).
 
 - audit_log_path:
 
@@ -105,9 +107,9 @@ pkt <- export_irb_compliance_packet(
 )
 pkt
 #> <airgap_compliance_packet> [AUDIT: VERIFIED]
-#>   Directory:     /tmp/RtmpYgqorT/demo_irb_packet
+#>   Directory:     /tmp/RtmpcmtWIm/demo_irb_packet
 #>   Artifacts:     4 file(s) + packet_manifest.json
-#>   Audit head:    sha256:de4d6262e0a35523ce47d067f807d3b515bec979e5fcf12509a6634ab31a3fd0
-#>   Packet digest: sha256:9f0b00f0c76878284d0c8ec1780b5666ffa5fc0aa33d86046b3e15e61f2354a2
+#>   Audit head:    sha256:36a3643329f3efc45a49987057c571f3603af3671943c7c6dc97e27916074d46
+#>   Packet digest: sha256:678ff1f7e453a265cf54106e69f9b27d11af2da054b8745c082c9b48c5f7fd1e
 unlink(pkt_dir, recursive = TRUE)
 ```

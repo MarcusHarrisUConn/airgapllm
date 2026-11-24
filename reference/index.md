@@ -1,9 +1,10 @@
 # Package index
 
-## Air-Gapped Container Lifecycle & GPU Sizing
+## Air-Gapped Container Lifecycle, Hardware Sizing & Benchmarking
 
 Generate pinned, network-isolated Docker and HPC Apptainer
-configurations, verify model SHA-256 digests, and right-size GPUs.
+configurations, verify model SHA-256 digests, auto-tune local hardware,
+and benchmark runtime throughput.
 
 - [`airgap_container_spec()`](https://marcusharrisphd.com/airgapllm/reference/airgap_container_spec.md)
   : Define a Hardened Air-Gapped Local LLM Container Specification
@@ -34,10 +35,19 @@ configurations, verify model SHA-256 digests, and right-size GPUs.
 - [`estimate_vram_requirements()`](https://marcusharrisphd.com/airgapllm/reference/estimate_vram_requirements.md)
   : Estimate GPU VRAM Requirements for Local Open-Weights LLM Deployment
 
-## Pre-Inference Privacy, PII & HIPAA Safe Harbor
+- [`recommend_runtime_config()`](https://marcusharrisphd.com/airgapllm/reference/recommend_runtime_config.md)
+  : Recommend Optimal Local LLM Configuration for Workstation or HPC
+  Hardware
 
-Deterministic pure-R PII detection, redaction, HIPAA Safe Harbor rules
-(ages \> 89 & restricted ZIP3), and zero-PII pre-run audits.
+- [`benchmark_local_runtime()`](https://marcusharrisphd.com/airgapllm/reference/benchmark_local_runtime.md)
+  : Benchmark Throughput, Latency Quantiles, and Retry Rate on a Local
+  Runtime
+
+## Pre-Inference Privacy, PII & k-Anonymity Risk Engine
+
+Deterministic pure-R PII detection, HIPAA Safe Harbor rules (ages \> 89
+& restricted ZIP3), zero-PII pre-run audits, and quasi-identifier
+k-anonymity / l-diversity export controls.
 
 - [`pii_default_entities()`](https://marcusharrisphd.com/airgapllm/reference/pii_default_entities.md)
   : Default Built-In PII Entity Types
@@ -54,6 +64,11 @@ Deterministic pure-R PII detection, redaction, HIPAA Safe Harbor rules
   : Generate a Pre-Run Privacy Coverage Report Without Leaking Raw PII
 - [`pii_audit_dataframe()`](https://marcusharrisphd.com/airgapllm/reference/pii_audit_dataframe.md)
   : Pre-Inference Privacy Dry-Run Audit for Research Data Frames
+- [`assess_reidentification_risk()`](https://marcusharrisphd.com/airgapllm/reference/assess_reidentification_risk.md)
+  : Assess Quasi-Identifier Re-Identification Risk (k-Anonymity &
+  l-Diversity)
+- [`apply_k_anonymity()`](https://marcusharrisphd.com/airgapllm/reference/apply_k_anonymity.md)
+  : Enforce k-Anonymity (and Optional l-Diversity) on a Research Table
 
 ## Keyed Pseudonymization & Encrypted Vaults
 
@@ -73,10 +88,11 @@ AES-256-CBC Encrypt-then-MAC vaults and atomic key rotation.
 - [`pii_vault_rotate_key()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_rotate_key.md)
   : Atomically Rotate the Master Encryption Key of a PII Vault
 
-## Resumable Schema-Enforced Batch Extraction
+## Resumable Schema-Enforced & Consensus Batch Extraction
 
 Long-transcript chunking, strict typed schemas, automated structured
-repair retries, and atomic JSONL crash-resumable batch extraction.
+repair retries, atomic JSONL crash-resumable batch extraction, and
+multi-pass self-consistency consensus coding.
 
 - [`chunk_clinical_texts()`](https://marcusharrisphd.com/airgapllm/reference/chunk_clinical_texts.md)
   : Deterministic Overlapping Chunker for Long Clinical Transcripts
@@ -112,6 +128,14 @@ repair retries, and atomic JSONL crash-resumable batch extraction.
   :
 
   Access Run Provenance and Privacy Metadata from an `airgap_extraction`
+
+- [`airgap_extract_consensus()`](https://marcusharrisphd.com/airgapllm/reference/airgap_extract_consensus.md)
+  : Multi-Pass Consensus & Self-Consistency Structured Batch Extraction
+
+- [`consensus_passes()`](https://marcusharrisphd.com/airgapllm/reference/consensus_accessors.md)
+  [`consensus_diagnostics()`](https://marcusharrisphd.com/airgapllm/reference/consensus_accessors.md)
+  : Access Long-Format Passes and Per-Field Diagnostics from Consensus
+  Extractions
 
 ## Local Air-Gapped Inference Runtimes
 

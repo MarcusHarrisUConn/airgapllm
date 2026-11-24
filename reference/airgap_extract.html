@@ -31,7 +31,7 @@ Optional automatic hash-chained PII-free IRB/HIPAA audit logging
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -46,6 +46,7 @@ Optional automatic hash-chained PII-free IRB/HIPAA audit logging
     <li><a class="dropdown-item" href="../articles/privacy-and-compliance.html">Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification</a></li>
     <li><a class="dropdown-item" href="../articles/irb-hipaa-compliance-walkthrough.html">IRB &amp; HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets</a></li>
     <li><a class="dropdown-item" href="../articles/hpc-gpu-deployment.html">HPC &amp; GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking</a></li>
+    <li><a class="dropdown-item" href="../articles/consensus-and-kanonymity.html">Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-pdfs" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">PDFs</button>
@@ -279,8 +280,8 @@ columns, and per-row metadata (<code>.status</code>, <code>.attempts</code>, <co
 <span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #949494;"># A tibble: 2 × 7</span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   note_id severity score .status .attempts .error .elapsed_ms</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>       <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> N1      moderate     0 ok              1 <span style="color: #BB0000;">NA</span>               2</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> N2      moderate     3 ok              1 <span style="color: #BB0000;">NA</span>               1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">1</span> N1      severe      10 ok              1 <span style="color: #BB0000;">NA</span>               2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> <span style="color: #BCBCBC;">2</span> N2      mild         2 ok              1 <span style="color: #BB0000;">NA</span>               1</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

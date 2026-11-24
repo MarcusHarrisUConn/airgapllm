@@ -36,15 +36,15 @@ tmp_log <- tempfile(fileext = ".jsonl")
 pf <- preflight_isolation_check(endpoint = "http://127.0.0.1:11434")
 audit_log_append(tmp_log, pf)
 #> <airgap_audit_entry> #1 [preflight_check]
-#>   Run ID:       preflight_20261124T193322Z_c423594e
-#>   Timestamp:    2026-11-24T19:33:22Z
+#>   Run ID:       preflight_20261124T210603Z_45740cab
+#>   Timestamp:    2026-11-24T21:06:03Z
 #>   Isolation:    PASS
 #>   PII policy:   NA
 #>   Prev hash:    GENESIS
-#>   Entry hash:   sha256:871eb574e0f41df2cde098dc93651e5475611871c8be22736b334919173c3d88
+#>   Entry hash:   sha256:4ed9eec4d36d0c169abf0115ed38c30795c7f2dbb3d68f1f6d8b556684a5013f
 audit_log_verify(tmp_log)
 #> <airgap_audit_verification> [VALID]
 #>   Entries verified: 1
-#>   Chain head hash:  sha256:871eb574e0f41df2cde098dc93651e5475611871c8be22736b334919173c3d88
+#>   Chain head hash:  sha256:4ed9eec4d36d0c169abf0115ed38c30795c7f2dbb3d68f1f6d8b556684a5013f
 unlink(tmp_log)
 ```

@@ -13,7 +13,7 @@ protocols."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -28,6 +28,7 @@ protocols."></head><body>
     <li><a class="dropdown-item" href="../articles/privacy-and-compliance.html">Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification</a></li>
     <li><a class="dropdown-item" href="../articles/irb-hipaa-compliance-walkthrough.html">IRB &amp; HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets</a></li>
     <li><a class="dropdown-item" href="../articles/hpc-gpu-deployment.html">HPC &amp; GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking</a></li>
+    <li><a class="dropdown-item" href="../articles/consensus-and-kanonymity.html">Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-pdfs" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">PDFs</button>
@@ -63,25 +64,28 @@ protocols.</p>
     <h2 id="core-architectural-pillars">Core Architectural Pillars<a class="anchor" aria-label="anchor" href="#core-architectural-pillars"></a></h2>
 
 
-<dl><dt>Air-Gapped Container Lifecycle Manager</dt>
+<dl><dt>Air-Gapped Container Lifecycle, Hardware Sizing &amp; Benchmarking</dt>
 <dd><p><code><a href="airgap_container_spec.html">airgap_container_spec()</a></code>,
 <code><a href="emit_docker_run.html">emit_docker_run()</a></code>, <code><a href="emit_docker_compose.html">emit_docker_compose()</a></code>, <code><a href="emit_apptainer_def.html">emit_apptainer_def()</a></code>,
 <code><a href="verify_model_digest.html">verify_model_digest()</a></code>, <code><a href="is_loopback_endpoint.html">is_loopback_endpoint()</a></code>,
-<code><a href="preflight_isolation_check.html">preflight_isolation_check()</a></code>, and <code><a href="estimate_vram_requirements.html">estimate_vram_requirements()</a></code>.</p></dd>
+<code><a href="preflight_isolation_check.html">preflight_isolation_check()</a></code>, <code><a href="estimate_vram_requirements.html">estimate_vram_requirements()</a></code>,
+<code><a href="recommend_runtime_config.html">recommend_runtime_config()</a></code>, and <code><a href="benchmark_local_runtime.html">benchmark_local_runtime()</a></code>.</p></dd>
 
-<dt>Pre-Inference Privacy &amp; PII Engine</dt>
+<dt>Pre-Inference Privacy, PII &amp; k-Anonymity Engine</dt>
 <dd><p><code><a href="pii_default_entities.html">pii_default_entities()</a></code>,
 <code><a href="hipaa_restricted_zip3.html">hipaa_restricted_zip3()</a></code>, <code><a href="pii_config.html">pii_config()</a></code>, <code><a href="pii_detect.html">pii_detect()</a></code>,
 <code><a href="pii_redact.html">pii_redact()</a></code>, <code><a href="pii_privacy_report.html">pii_privacy_report()</a></code>, <code><a href="pii_audit_dataframe.html">pii_audit_dataframe()</a></code>,
 <code><a href="pii_vault_key.html">pii_vault_key()</a></code>, <code><a href="pii_pseudonymize.html">pii_pseudonymize()</a></code>, <code><a href="pii_reidentify.html">pii_reidentify()</a></code>,
-<code><a href="pii_vault_save.html">pii_vault_save()</a></code>, <code><a href="pii_vault_load.html">pii_vault_load()</a></code>, and <code><a href="pii_vault_rotate_key.html">pii_vault_rotate_key()</a></code>.</p></dd>
+<code><a href="pii_vault_save.html">pii_vault_save()</a></code>, <code><a href="pii_vault_load.html">pii_vault_load()</a></code>, <code><a href="pii_vault_rotate_key.html">pii_vault_rotate_key()</a></code>,
+<code><a href="assess_reidentification_risk.html">assess_reidentification_risk()</a></code>, and <code><a href="apply_k_anonymity.html">apply_k_anonymity()</a></code>.</p></dd>
 
-<dt>Resumable Schema-Enforced Batch Extractor</dt>
+<dt>Resumable Schema-Enforced &amp; Consensus Batch Extractor</dt>
 <dd><p><code><a href="chunk_clinical_texts.html">chunk_clinical_texts()</a></code>,
 <code><a href="schema_field.html">schema_field()</a></code>, <code><a href="extraction_schema.html">extraction_schema()</a></code>, <code><a href="as_json_schema.html">as_json_schema()</a></code>,
 <code><a href="validate_extraction.html">validate_extraction()</a></code>, <code><a href="build_repair_prompt.html">build_repair_prompt()</a></code>, <code><a href="runtime_ollama.html">runtime_ollama()</a></code>,
-<code><a href="runtime_openai_local.html">runtime_openai_local()</a></code>, <code><a href="runtime_mock.html">runtime_mock()</a></code>, <code><a href="airgap_extract.html">airgap_extract()</a></code>, and
-<code><a href="extraction_accessors.html">extraction_manifest()</a></code>.</p></dd>
+<code><a href="runtime_openai_local.html">runtime_openai_local()</a></code>, <code><a href="runtime_mock.html">runtime_mock()</a></code>, <code><a href="airgap_extract.html">airgap_extract()</a></code>,
+<code><a href="airgap_extract_consensus.html">airgap_extract_consensus()</a></code>, <code><a href="consensus_accessors.html">consensus_passes()</a></code>,
+<code><a href="consensus_accessors.html">consensus_diagnostics()</a></code>, and <code><a href="extraction_accessors.html">extraction_manifest()</a></code>.</p></dd>
 
 <dt>Immutable Audit Trail &amp; IRB Protocol Generator</dt>
 <dd><p><code><a href="audit_log_append.html">audit_log_append()</a></code>,

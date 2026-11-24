@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -22,6 +22,7 @@
     <li><a class="dropdown-item" href="../articles/privacy-and-compliance.html">Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification</a></li>
     <li><a class="dropdown-item" href="../articles/irb-hipaa-compliance-walkthrough.html">IRB &amp; HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets</a></li>
     <li><a class="dropdown-item" href="../articles/hpc-gpu-deployment.html">HPC &amp; GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking</a></li>
+    <li><a class="dropdown-item" href="../articles/consensus-and-kanonymity.html">Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-pdfs" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">PDFs</button>
@@ -44,9 +45,9 @@
     </div>
 
     <div class="section level2">
-      <h2 id="air-gapped-container-lifecycle-gpu-sizing">Air-Gapped Container Lifecycle &amp; GPU Sizing<a class="anchor" aria-label="anchor" href="#air-gapped-container-lifecycle-gpu-sizing"></a></h2>
+      <h2 id="air-gapped-container-lifecycle-hardware-sizing-benchmarking">Air-Gapped Container Lifecycle, Hardware Sizing &amp; Benchmarking<a class="anchor" aria-label="anchor" href="#air-gapped-container-lifecycle-hardware-sizing-benchmarking"></a></h2>
 
-      <div class="section-desc"><p>Generate pinned, network-isolated Docker and HPC Apptainer configurations, verify model SHA-256 digests, and right-size GPUs.</p></div>
+      <div class="section-desc"><p>Generate pinned, network-isolated Docker and HPC Apptainer configurations, verify model SHA-256 digests, auto-tune local hardware, and benchmark runtime throughput.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -108,10 +109,24 @@
 
         </dt>
         <dd>Estimate GPU VRAM Requirements for Local Open-Weights LLM Deployment</dd>
-      </dl></div><div class="section level2">
-      <h2 id="pre-inference-privacy-pii-hipaa-safe-harbor">Pre-Inference Privacy, PII &amp; HIPAA Safe Harbor<a class="anchor" aria-label="anchor" href="#pre-inference-privacy-pii-hipaa-safe-harbor"></a></h2>
 
-      <div class="section-desc"><p>Deterministic pure-R PII detection, redaction, HIPAA Safe Harbor rules (ages &gt; 89 &amp; restricted ZIP3), and zero-PII pre-run audits.</p></div>
+        <dt>
+
+          <code><a href="recommend_runtime_config.html">recommend_runtime_config()</a></code>
+
+        </dt>
+        <dd>Recommend Optimal Local LLM Configuration for Workstation or HPC Hardware</dd>
+
+        <dt>
+
+          <code><a href="benchmark_local_runtime.html">benchmark_local_runtime()</a></code>
+
+        </dt>
+        <dd>Benchmark Throughput, Latency Quantiles, and Retry Rate on a Local Runtime</dd>
+      </dl></div><div class="section level2">
+      <h2 id="pre-inference-privacy-pii-k-anonymity-risk-engine">Pre-Inference Privacy, PII &amp; k-Anonymity Risk Engine<a class="anchor" aria-label="anchor" href="#pre-inference-privacy-pii-k-anonymity-risk-engine"></a></h2>
+
+      <div class="section-desc"><p>Deterministic pure-R PII detection, HIPAA Safe Harbor rules (ages &gt; 89 &amp; restricted ZIP3), zero-PII pre-run audits, and quasi-identifier k-anonymity / l-diversity export controls.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -166,6 +181,20 @@
 
         </dt>
         <dd>Pre-Inference Privacy Dry-Run Audit for Research Data Frames</dd>
+
+        <dt>
+
+          <code><a href="assess_reidentification_risk.html">assess_reidentification_risk()</a></code>
+
+        </dt>
+        <dd>Assess Quasi-Identifier Re-Identification Risk (k-Anonymity &amp; l-Diversity)</dd>
+
+        <dt>
+
+          <code><a href="apply_k_anonymity.html">apply_k_anonymity()</a></code>
+
+        </dt>
+        <dd>Enforce k-Anonymity (and Optional l-Diversity) on a Research Table</dd>
       </dl></div><div class="section level2">
       <h2 id="keyed-pseudonymization-encrypted-vaults">Keyed Pseudonymization &amp; Encrypted Vaults<a class="anchor" aria-label="anchor" href="#keyed-pseudonymization-encrypted-vaults"></a></h2>
 
@@ -218,9 +247,9 @@
         </dt>
         <dd>Atomically Rotate the Master Encryption Key of a PII Vault</dd>
       </dl></div><div class="section level2">
-      <h2 id="resumable-schema-enforced-batch-extraction">Resumable Schema-Enforced Batch Extraction<a class="anchor" aria-label="anchor" href="#resumable-schema-enforced-batch-extraction"></a></h2>
+      <h2 id="resumable-schema-enforced-consensus-batch-extraction">Resumable Schema-Enforced &amp; Consensus Batch Extraction<a class="anchor" aria-label="anchor" href="#resumable-schema-enforced-consensus-batch-extraction"></a></h2>
 
-      <div class="section-desc"><p>Long-transcript chunking, strict typed schemas, automated structured repair retries, and atomic JSONL crash-resumable batch extraction.</p></div>
+      <div class="section-desc"><p>Long-transcript chunking, strict typed schemas, automated structured repair retries, atomic JSONL crash-resumable batch extraction, and multi-pass self-consistency consensus coding.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -282,6 +311,20 @@
 
         </dt>
         <dd>Access Run Provenance and Privacy Metadata from an <code>airgap_extraction</code></dd>
+
+        <dt>
+
+          <code><a href="airgap_extract_consensus.html">airgap_extract_consensus()</a></code>
+
+        </dt>
+        <dd>Multi-Pass Consensus &amp; Self-Consistency Structured Batch Extraction</dd>
+
+        <dt>
+
+          <code><a href="consensus_accessors.html">consensus_passes()</a></code> <code><a href="consensus_accessors.html">consensus_diagnostics()</a></code>
+
+        </dt>
+        <dd>Access Long-Format Passes and Per-Field Diagnostics from Consensus Extractions</dd>
       </dl></div><div class="section level2">
       <h2 id="local-air-gapped-inference-runtimes">Local Air-Gapped Inference Runtimes<a class="anchor" aria-label="anchor" href="#local-air-gapped-inference-runtimes"></a></h2>
 

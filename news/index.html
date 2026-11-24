@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.3.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -22,6 +22,7 @@
     <li><a class="dropdown-item" href="../articles/privacy-and-compliance.html">Privacy Engineering, Reversible Pseudonymization, Crash Recovery, and Audit Verification</a></li>
     <li><a class="dropdown-item" href="../articles/irb-hipaa-compliance-walkthrough.html">IRB &amp; HIPAA Compliance Walkthrough: Safe Harbor, Key Rotation, and Audit Packets</a></li>
     <li><a class="dropdown-item" href="../articles/hpc-gpu-deployment.html">HPC &amp; GPU Workstation Deployment: VRAM Sizing, Containers, and Long-Transcript Chunking</a></li>
+    <li><a class="dropdown-item" href="../articles/consensus-and-kanonymity.html">Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-pdfs" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">PDFs</button>
@@ -44,6 +45,90 @@
       <small>Source: <a href="https://github.com/MarcusHarrisUConn/airgapllm/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.0" id="airgapllm-050">airgapllm 0.5.0<a class="anchor" aria-label="anchor" href="#airgapllm-050"></a></h2>
+<div class="section level3">
+<h3 id="independent-peer-red-team-security-privacy--robustness-hardening-0-5-0">Independent Peer Red-Team Security, Privacy &amp; Robustness Hardening<a class="anchor" aria-label="anchor" href="#independent-peer-red-team-security-privacy--robustness-hardening-0-5-0"></a></h3>
+<p>Addresses all <strong>21 confirmed findings</strong> (2 CRITICAL, 9 HIGH, 7 MEDIUM, 3 LOW) from the independent peer red-team security audit, backed by permanent regression tests in <code>tests/testthat/test-peer-redteam.R</code>:</p>
+<div class="section level4">
+<h4 id="critical-fixes-0-5-0">Critical Fixes<a class="anchor" aria-label="anchor" href="#critical-fixes-0-5-0"></a></h4>
+<ul><li>
+<strong>Eliminated <code>cli</code> Glue Expression Injection / RCE (<code>C-01</code>)</strong>: Escaped dynamic diagnostic strings across all untrusted-input <code><a href="https://cli.r-lib.org/reference/cli_abort.html" class="external-link">cli::cli_abort()</a></code> call sites (<code>R/audit.R</code>, <code>R/irb.R</code>, <code>R/workflow.R</code>, <code>R/runtime.R</code>, <code>R/container.R</code>, <code>R/pii.R</code>) via centralized <code>escape_cli_braces()</code>, preventing arbitrary R code execution from tampered audit logs, malicious endpoint URLs, invalid model paths, metadata keys, or malformed regexes.</li>
+<li>
+<strong>Closed Audit Log &amp; IRB Compliance Packet PHI Leakage (<code>C-02</code>)</strong>: Enforced finite non-negative integer validation on <code>row_counts</code>, <code>pii_counts</code>, and <code>output_pii_leaks</code>, strict ISO-8601 UTC <code>timestamp</code> validation, and full built-in PII scanning across <code>decoding_params</code>, <code>run_id</code>, <code>event_type</code>, <code>model_name</code>, and all scalar string audit fields. Upgraded <code><a href="../reference/export_irb_compliance_packet.html">export_irb_compliance_packet()</a></code> to pre-scan protocol header fields and scan <strong>every</strong> exported artifact (including <code>irb_protocol_narrative.md</code>, <code>irb_protocol_narrative.qmd</code>, container specs, and <code>packet_manifest.json</code>) across all built-in direct PII classes before setting <code>zero_pii_verified = TRUE</code>.</li>
+</ul></div>
+<div class="section level4">
+<h4 id="high-severity-security--privacy-fixes-0-5-0">High-Severity Security &amp; Privacy Fixes<a class="anchor" aria-label="anchor" href="#high-severity-security--privacy-fixes-0-5-0"></a></h4>
+<ul><li>
+<strong>Forged Pseudonym Token Detection &amp; Nonce Sentinels (<code>H-01</code>)</strong>: <code>scan_and_handle_output_pii()</code> now verifies <code>&lt;&lt;TYPE_HEX&gt;&gt;</code> tokens strictly against active vault token allowlists, flagging forged hex-digit exfiltration tokens as <code>forged_pseudonym_token</code>, and protects genuine tokens with per-call 64-bit random nonces (<code>__AGVTOK_&lt;nonce&gt;_...__</code>) and single-pass restoration to prevent placeholder collisions.</li>
+<li>
+<strong>Protected Container Offline/Loopback Environment Controls (<code>H-02</code>)</strong>: Blocked overriding <code>HF_HUB_OFFLINE</code>, <code>TRANSFORMERS_OFFLINE</code>, <code>HF_DATASETS_OFFLINE</code>, <code>DO_NOT_TRACK</code>, <code>OLLAMA_NOHISTORY</code>, <code>OLLAMA_HOST</code>, <code>OLLAMA_MODELS</code>, and proxy variables (<code>HTTP_PROXY</code>/<code>HTTPS_PROXY</code>/<code>ALL_PROXY</code>/<code>NO_PROXY</code>/etc.) in <code>airgap_container_spec(env = ...)</code>, re-validated in <code>build_container_env()</code>, and added a required <code>container_env_isolation</code> check in <code><a href="../reference/preflight_isolation_check.html">preflight_isolation_check()</a></code>.</li>
+<li>
+<strong>Vault Encryption Downgrade Defense (<code>H-03</code>)</strong>: <code><a href="../reference/pii_vault_load.html">pii_vault_load()</a></code> now accepts <code>require_encrypted = !is.null(key)</code> and aborts with <code>airgap_vault_error</code> if an unencrypted JSON vault is encountered when a decryption <code>key</code> is supplied or <code>require_encrypted = TRUE</code>.</li>
+<li>
+<strong>Symlink Write Confinement &amp; Pre-Write <code>0600</code> Permissions (<code>H-04</code>)</strong>: Added <code>assert_safe_write_target()</code> across <code><a href="../reference/export_irb_compliance_packet.html">export_irb_compliance_packet()</a></code>, <code><a href="../reference/pii_vault_save.html">pii_vault_save()</a></code>, <code>pii_vault_rotate_key(backup = TRUE)</code>, <code><a href="../reference/audit_log_append.html">audit_log_append()</a></code>, <code>airgap_extract(checkpoint_path = ...)</code>, <code>generate_irb_narrative(file = ...)</code>, and container emitters, ensuring symlink targets can never be overwritten and temporary vault/backup files receive <code>0600</code> permissions before bytes are written.</li>
+<li>
+<strong>Model Digest Hidden-File &amp; Parent-Symlink Confinement (<code>H-05</code>)</strong>: <code><a href="../reference/verify_model_digest.html">verify_model_digest()</a></code> now enumerates hidden dotfiles (<code>all.files = TRUE, no.. = TRUE</code>) and walks all parent directory components to block parent-directory symlinks even when <code>root_dir = NULL</code>.</li>
+<li>
+<strong>Unicode Combining-Mark, ALL-CAPS EHR &amp; Accented Name PII Coverage (<code>H-06</code>)</strong>: Extended <code>canonicalize_pii_text()</code> to strip Unicode combining diacritics and transliterate Latin accented letters with exact original span mapping; added case-insensitive clinical title/role matching and ALL-CAPS role-prefixed name detection (<code>PATIENT: JOHN DOE</code>, <code>DR. JANE DOE</code>, <code>ATTENDING ROBERT MILLER</code>).</li>
+<li>
+<strong>Pre-Inference <code>prompt_template</code> PHI Gate (<code>H-07</code>)</strong>: <code><a href="../reference/airgap_extract.html">airgap_extract()</a></code> and <code><a href="../reference/airgap_extract_consensus.html">airgap_extract_consensus()</a></code> now scan supplied prompt templates for raw PII and reject pre-rendered templates embedding unsanitized input rows when <code>pii_policy != "verified_deidentified"</code>.</li>
+<li>
+<strong>Injective <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-Anonymity Keys &amp; Fail-Closed <code>include_na = FALSE</code> (<code>H-08</code>)</strong>: Replaced <code>\x1f</code>/<code>"&lt;NA&gt;"</code> equivalence keys with strictly injective length-prefixed encoding (<code>N:</code> vs <code>V&lt;bytes&gt;:&lt;value&gt;</code>); prevented <code>NA</code>-QI rows from escaping suppression/masking under <code>include_na = FALSE</code>; rejected <code>mask_value = NA</code> with <code>include_na = FALSE</code>; failed closed when all non-empty rows are excluded; and added <code>airgap_anonymity_warning</code> whenever post-anonymization targets remain unmet.</li>
+<li>
+<strong>Checkpoint Model Identity, Input-Drift Verification &amp; Zero-PHI Error Hygiene (<code>H-09</code>)</strong>: <code>checkpoint_load()</code> now verifies <code>header$model</code> matches the active runtime model; resume logic verifies per-row <code>input_sha256</code> against sanitized input text; and <code><a href="../reference/validate_extraction.html">validate_extraction()</a></code> omits untrusted raw LLM extra keys and raw enum values from persisted <code>.error</code> messages.</li>
+</ul></div>
+<div class="section level4">
+<h4 id="medium--low-reliability--interoperability-fixes-0-5-0">Medium &amp; Low Reliability &amp; Interoperability Fixes<a class="anchor" aria-label="anchor" href="#medium--low-reliability--interoperability-fixes-0-5-0"></a></h4>
+<ul><li>
+<strong>Consensus Token Allowlisting &amp; Integrity (<code>M-01</code>, <code>M-02</code>)</strong>: Propagated active vault tokens into <code><a href="../reference/airgap_extract_consensus.html">airgap_extract_consensus()</a></code> inner passes so genuine all-digit pseudonym tokens (e.g., <code>&lt;&lt;PAT_0123456789&gt;&gt;</code>) are preserved cleanly; rejected duplicate <code>prompt_templates</code> names and schema field collisions with <code>id_col</code> or consensus columns; returned <code>NA_real_</code> agreement when fewer than 2 passes succeed; and eliminated <code>Inf</code> overflow on wide numeric bounds (<code>[-1e308, 1e308]</code>).</li>
+<li>
+<strong>Uniform Finite Integer Validation (<code>M-03</code>)</strong>: Centralized <code>assert_scalar_int()</code> rejecting <code>Inf</code>, <code>NaN</code>, non-integers, and out-of-range doubles across all numeric/integer entry points.</li>
+<li>
+<strong>Chunker Progress &amp; Exact Character Overlap (<code>M-04</code>)</strong>: Enforced <code>min_cut &gt;= overlap_chars + 1L</code> in <code><a href="../reference/chunk_clinical_texts.html">chunk_clinical_texts()</a></code> to prevent nested duplicate-chunk explosions and gated word-boundary overlap snapping to non-character split modes.</li>
+<li>
+<strong>IPv6 <code>[::1]</code> Proxy Audit &amp; Container Flag Hardening (<code>M-05</code>)</strong>: Updated <code>detect_outbound_proxies()</code> to require <code>::1</code> in <code>NO_PROXY</code> when targeting <code>[::1]</code>; blocked <code>--trust-remote-code</code>, <code>--download-dir</code>, and leading-dash <code>model_dir</code> paths.</li>
+<li>
+<strong>Single-Pass <code><a href="../reference/pii_reidentify.html">pii_reidentify()</a></code> &amp; Consensus IRB Parity (<code>M-06</code>)</strong>: Upgraded <code><a href="../reference/pii_reidentify.html">pii_reidentify()</a></code> to single-pass left-to-right token replacement; added <code>airgap_consensus</code> support to <code><a href="../reference/export_irb_compliance_packet.html">export_irb_compliance_packet()</a></code> and <code>"consensus_extraction_run"</code> selection in <code><a href="../reference/generate_irb_narrative.html">generate_irb_narrative()</a></code>.</li>
+<li>
+<strong>Hardware Auto-Tuner OOM Warnings &amp; Input Validation (<code>M-07</code>)</strong>: Added <code>recommended$feasible</code> flag + <code>airgap_hardware_warning</code> on infeasible VRAM fallback, strictly capped <code>container_memory_limit</code> at physical <code>ram_gb</code>, and hardened <code>corpus_size</code>, <code>preview_n</code>, and <code>preview_chars</code> checks.</li>
+<li>
+<strong>Prompt-Sensitive Mock Variance, Multiline Addresses &amp; Delimiter Sanitization (<code>L-01</code>, <code>L-02</code>, <code>L-03</code>)</strong>: Mixed prompt template instruction hashes into <code><a href="../reference/runtime_mock.html">runtime_mock()</a></code> deterministic outputs for realistic multi-prompt consensus variance; extended <code>street_address</code> regex across newline-separated city/state/ZIP lines; rejected shell metacharacters in <code>unix:///</code> paths; and broadened <code>neutralize_prompt_delimiters()</code> to match whitespace/attribute tag variants.</li>
+</ul></div>
+</div>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.4.0" id="airgapllm-040">airgapllm 0.4.0<a class="anchor" aria-label="anchor" href="#airgapllm-040"></a></h2>
+<div class="section level3">
+<h3 id="new-research-workflow-capabilities-0-4-0">New Research-Workflow Capabilities<a class="anchor" aria-label="anchor" href="#new-research-workflow-capabilities-0-4-0"></a></h3>
+<ul><li>
+<strong>Quasi-Identifier &amp; k-Anonymity / l-Diversity Risk Auditor (<code>R/anonymity.R</code>)</strong>:
+<ul><li>Added <code><a href="../reference/assess_reidentification_risk.html">assess_reidentification_risk()</a></code> quantifying equivalence class distributions, minimum/median <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>, sample uniques, <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-anonymity violations, prosecutor and journalist re-identification risk metrics, and optional distinct <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>l</mi><annotation encoding="application/x-tex">l</annotation></semantics></math>-diversity for sensitive outcomes—never logging raw participant values.</li>
+<li>Added <code><a href="../reference/apply_k_anonymity.html">apply_k_anonymity()</a></code> supporting safe row suppression (<code>"suppress_rows"</code>) and progressive rare-class masking (<code>"mask_rare"</code>, automatically absorbing smallest residual classes so masked fallback groups strictly satisfy <code>k_min</code> and <code>l_min</code>), returning privacy-safe tables alongside before/after risk reductions.</li>
+</ul></li>
+<li>
+<strong>Multi-Pass Consensus &amp; Self-Consistency Extraction (<code>R/consensus.R</code>)</strong>:
+<ul><li>Added <code><a href="../reference/airgap_extract_consensus.html">airgap_extract_consensus()</a></code> running deterministic multi-pass extractions across multiple random seeds and/or prompt variants (including full crossed <code>seeds x prompt_templates</code> designs), aggregating categorical/logical fields by majority vote (<code>tie_policy = c("first", "na")</code>) and numeric/integer fields by median, trimmed mean, or mean.</li>
+<li>Added <code><a href="../reference/consensus_accessors.html">consensus_passes()</a></code> (long-format pass table directly compatible with psychometric generalizability / reliability studies with zero hard dependencies) and <code><a href="../reference/consensus_accessors.html">consensus_diagnostics()</a></code> (per-field agreement, unanimity, and tie counts), with seamless integration into <code><a href="../reference/extraction_accessors.html">extraction_manifest()</a></code>, <code><a href="../reference/audit_log_append.html">audit_log_append()</a></code>, and <code><a href="../reference/generate_irb_narrative.html">generate_irb_narrative()</a></code>.</li>
+</ul></li>
+<li>
+<strong>Hardware-Aware Auto-Tuner &amp; Runtime Benchmarker (<code>R/benchmark.R</code>)</strong>:
+<ul><li>Added <code><a href="../reference/recommend_runtime_config.html">recommend_runtime_config()</a></code> selecting OOM-safe open-weights parameter tiers, quantizations, context windows, batch sizes, KV precisions, and hardened container memory limits for workstation GPUs, multi-GPU HPC nodes, and CPU-only hosts.</li>
+<li>Added <code><a href="../reference/benchmark_local_runtime.html">benchmark_local_runtime()</a></code> profiling pilot throughput (<code>rows/sec</code>), p50/p95 latency, schema validation success rate, repair retry rate, and projected full-corpus ETA cleanly on local or mock runtimes.</li>
+</ul></li>
+</ul></div>
+<div class="section level3">
+<h3 id="coverage-driven-bug-fixes--documentation-0-4-0">Coverage-Driven Bug Fixes &amp; Documentation<a class="anchor" aria-label="anchor" href="#coverage-driven-bug-fixes--documentation-0-4-0"></a></h3>
+<ul><li>Conducted a comprehensive <code>covr</code> audit raising package line coverage from 89.3% to <strong>&gt;94%</strong> and resolving five latent edge cases:
+<ul><li>Fixed 0-byte pre-existing checkpoint files failing to initialize a header record before appending rows in <code><a href="../reference/airgap_extract.html">airgap_extract()</a></code>.</li>
+<li>Hardened output PII masking sentinels when combining <code>pii_policy = "pseudonymize"</code> with <code>output_pii_action = "redact"</code>.</li>
+<li>Added malformed tail guards to <code>audit_log_append(..., verify_existing = FALSE)</code>.</li>
+<li>Removed unreachable dead branches in <code>resolve_overlapping_spans()</code>.</li>
+<li>Suppressed spurious base PCRE compilation warnings before throwing structured validation errors on invalid custom regexes in <code><a href="../reference/schema_field.html">schema_field()</a></code> and <code><a href="../reference/pii_config.html">pii_config()</a></code>.</li>
+</ul></li>
+<li>Added a fifth executable vignette (<code>vignettes/consensus-and-kanonymity.Rmd</code>), updated the standalone PDF Field Guide, <code>pkgdown</code> reference site, and <code>README.md</code>.</li>
+</ul></div>
+</div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.3.0" id="airgapllm-030">airgapllm 0.3.0<a class="anchor" aria-label="anchor" href="#airgapllm-030"></a></h2>
 <div class="section level3">

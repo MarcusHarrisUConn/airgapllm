@@ -1,15 +1,40 @@
-# Security Policy & v0.2.0 Red-Team Hardening Audit
+# Security Policy & Red-Team Hardening Audits (v0.2.0 & v0.5.0)
 
 `airgapllm` is designed for sensitive human-subjects research text
 governed by **IRB, HIPAA, and FERPA** data-use agreements. This document
-records the concrete vulnerabilities identified during the v0.2.0
-adversarial red-team audit of v0.1.0, the architectural mitigations
-implemented in `R/security.R` and across all four pillars, and guidance
-for reporting security issues.
+records the concrete vulnerabilities identified during both the v0.2.0
+internal adversarial red-team audit and the v0.5.0 independent peer
+red-team audit, the architectural mitigations implemented across the
+package, and guidance for reporting security issues.
 
 ------------------------------------------------------------------------
 
-## 1. v0.2.0 Adversarial Red-Team Findings & Mitigations
+## 1. v0.5.0 Independent Peer Red-Team Audit & Hardening (21 Findings Resolved)
+
+An independent peer audit exercised every module (`R/*.R`) and
+cross-package interoperability flows with live exploits and fuzzing. All
+21 confirmed findings (2 Critical, 9 High, 7 Medium, 3 Low) were
+remediated in v0.5.0 and locked down with permanent regression tests in
+`tests/testthat/test-peer-redteam.R`:
+
+| ID | Severity | Surface | Vulnerability Identified | Remediation Implemented in v0.5.0 |
+|:---|:---|:---|:---|:---|
+| **C-01** | **Critical** | [`cli::cli_abort()`](https://cli.r-lib.org/reference/cli_abort.html) Formatting (`R/audit.R`, `R/irb.R`, `R/workflow.R`, `R/runtime.R`, `R/container.R`, `R/pii.R`) | Dynamic untrusted strings (tampered audit JSON keys, endpoint URLs, model paths, metadata keys, malformed regex messages) were passed directly into [`cli::cli_abort()`](https://cli.r-lib.org/reference/cli_abort.html), allowing `{...}` glue R code execution. | Centralized `escape_cli_braces()` escaping all dynamic error bullets and wrapped dynamic interpolations (`"{ep_info$reason}"`, `"{conditionMessage(e)}"`) so untrusted braces are never evaluated. |
+| **C-02** | **Critical** | Audit Logs & IRB Compliance Packets (`R/audit.R`, `R/workflow.R`) | `decoding_params`, `row_counts`, and scalar audit fields were unscanned or used a truncated 4-entity scan; [`export_irb_compliance_packet()`](https://marcusharrisphd.com/airgapllm/reference/export_irb_compliance_packet.md) skipped `.md`/`.qmd`/manifest scanning while stamping `zero_pii_verified = TRUE`. | Enforced finite non-negative integer checks on `row_counts`/`pii_counts`/`output_pii_leaks`, strict ISO-8601 `timestamp` validation, full built-in PII scanning on all audit fields, and full-artifact zero-PII scanning across every file and manifest JSON before sealing packets. |
+| **H-01** | **High** | Output PII Scanner (`R/extract.R`) | Any `<<TYPE_HEX>>` pattern bypassed output PII scanning without checking vault membership; predictable `{AIRGAPTOK:0001}` placeholders risked collision corruption. | Verified tokens strictly against `active_vault$mappings` allowlists, flagged unrecognized tokens as `forged_pseudonym_token`, and used per-call 64-bit random nonce sentinels with single-pass restoration. |
+| **H-02** | **High** | Container Offline Environment (`R/security.R`, `R/container.R`) | User `env` entries could override `HF_HUB_OFFLINE`, `OLLAMA_HOST`, `DO_NOT_TRACK`, or inject `HTTP_PROXY` while passing [`preflight_isolation_check()`](https://marcusharrisphd.com/airgapllm/reference/preflight_isolation_check.md). | Blocked protected offline/loopback and proxy env vars in `assert_safe_env_entry()`, re-validated in `build_container_env()`, and added required `container_env_isolation` pre-flight verification. |
+| **H-03** | **High** | Vault Load Downgrade (`R/pii.R`) | Supplying `key` to [`pii_vault_load()`](https://marcusharrisphd.com/airgapllm/reference/pii_vault_load.md) silently loaded a swapped plaintext (`encrypted = FALSE`) vault. | Added `require_encrypted = !is.null(key)` and aborted with `airgap_vault_error` whenever an unencrypted vault is loaded under encryption expectation. |
+| **H-04** | **High** | Symlink Write Targets (`R/security.R`, `R/workflow.R`, `R/pii.R`, `R/audit.R`, `R/extract.R`, `R/irb.R`, `R/container.R`) | Planted symlinks in compliance packet directories, vault rotation `.bak` files, checkpoints, logs, or emitters could overwrite arbitrary files. | Added `assert_safe_write_target()` across all disk write paths (allowing Darwin OS aliases `/var`, `/tmp`, `/etc` while rejecting user symlinks) and created `0600` temp files prior to writing vault bytes. |
+| **H-05** | **High** | Model Digest Verification (`R/container.R`, `R/security.R`) | Hidden dotfiles and hidden symlinks were skipped (`all.files = FALSE`); parent-directory symlinks were unchecked when `root_dir = NULL`. | Enumerated `all.files = TRUE, no.. = TRUE` in [`verify_model_digest()`](https://marcusharrisphd.com/airgapllm/reference/verify_model_digest.md) and walked parent directory components in `assert_path_confined()` even when `root_dir = NULL`. |
+| **H-06** | **High** | PII Evasion (`R/security.R`, `R/pii.R`) | Combining diacritics (`123\u0301-45-6789`), ALL-CAPS EHR headers/names (`PATIENT: JOHN DOE`, `ATTENDING ROBERT MILLER`), and accented names evaded detection. | Stripped combining marks and transliterated Latin accents in `canonicalize_pii_text()` with exact original span mapping; enabled case-insensitive clinical titles/roles and ALL-CAPS role-prefixed names. |
+| **H-07** | **High** | `prompt_template` Privacy Gate (`R/extract.R`, `R/consensus.R`) | Pre-rendered `prompt_template` strings containing raw PHI bypassed pre-inference PII redaction. | Scanned `prompt_template` / `prompt_templates` for raw PII and blocked templates lacking [text](https://r-text.org/) that embed unsanitized input rows when `pii_policy != "verified_deidentified"`. |
+| **H-08** | **High** | $`k`$-Anonymity / $`l`$-Diversity (`R/anonymity.R`) | `NA`-QI rows escaped suppression under `include_na = FALSE`; `mask_value = NA` produced false passes; `\x1f`/`"<NA>"` caused key collisions; non-compliant `mask_rare` failed silently. | Switched to strictly injective length-prefixed equivalence keys, marked excluded `NA`-QI rows as violating, blocked `mask_value = NA` with `include_na = FALSE`, failed closed on all-excluded tables, and added `airgap_anonymity_warning`. |
+| **H-09** | **High** | Checkpoint Integrity (`R/extract.R`, `R/schema.R`) | Checkpoint resume did not verify model identity or per-row `input_sha256`; validation errors echoed raw LLM extra keys and enum values. | Verified `header$model` and per-row `input_sha256` on resume (aborting with `airgap_checkpoint_error` on mismatch/drift) and omitted raw untrusted LLM keys/values from [`validate_extraction()`](https://marcusharrisphd.com/airgapllm/reference/validate_extraction.md) errors. |
+| **M-01..M-07, L-01..L-03** | **Medium / Low** | Consensus, Validators, Chunker, Proxy, Hardware, Mock, Regex | Consensus all-digit token mangling, duplicate prompt drops, column overwrites, single-pass 100% agreement, `Inf` numeric/validator bypasses, chunker duplicate loop, IPv6 `[::1]` `NO_PROXY`, `--trust-remote-code`, sequential [`pii_reidentify()`](https://marcusharrisphd.com/airgapllm/reference/pii_reidentify.md), silent OOM/RAM over-allocation, zero mock prompt variance, multiline street city leak, `unix:///` metacharacters, and `</UNTRUSTED_RESEARCH_RECORD >` tag spaces. | Propagated vault tokens in consensus; centralized `assert_scalar_int()`; enforced `min_cut >= overlap_chars + 1L`; required `::1` in `NO_PROXY` for `[::1]`; blocked `--trust-remote-code`, `--download-dir`, and leading-dash paths; switched [`pii_reidentify()`](https://marcusharrisphd.com/airgapllm/reference/pii_reidentify.md) to single-pass; added `feasible` + RAM cap + OOM warning; mixed prompt hash into [`runtime_mock()`](https://marcusharrisphd.com/airgapllm/reference/runtime_mock.md); broadened multiline address, `unix:///`, and delimiter regexes. |
+
+------------------------------------------------------------------------
+
+## 2. v0.2.0 Adversarial Red-Team Findings & Mitigations
 
 | \# | Severity | Surface | Vulnerability Identified in v0.1.0 | Remediation Implemented in v0.2.0 |
 |:---|:---|:---|:---|:---|
@@ -23,7 +48,7 @@ for reporting security issues.
 
 ------------------------------------------------------------------------
 
-## 2. Cryptographic Architecture Summary
+## 3. Cryptographic Architecture Summary
 
 - **Key Derivation:** RFC 5869 `HKDF-SHA256` with domain-separated
   `info` strings:
@@ -46,7 +71,7 @@ for reporting security issues.
 
 ------------------------------------------------------------------------
 
-## 3. Responsible Security Reporting
+## 4. Responsible Security Reporting
 
 If you discover a security vulnerability, air-gap bypass, PII leakage
 vector, or cryptographic weakness in `airgapllm`, please report it

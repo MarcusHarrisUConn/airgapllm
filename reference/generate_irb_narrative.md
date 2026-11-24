@@ -85,11 +85,11 @@ cat(generate_irb_narrative(res, protocol_id = "IRB-2026-001"))
 #> 
 #> - **Protocol ID:** IRB-2026-001
 #> - **Regulatory Scope:** HIPAA / IRB
-#> - **Run ID:** `run_20261124T193324Z_60795f24` (2026-11-24T19:33:24Z)
+#> - **Run ID:** `run_20261124T210604Z_95eaa4e4` (2026-11-24T21:06:04Z)
 #> 
 #> ### 1. Offline Local AI Execution & Network Isolation
 #> 
-#> All automated natural language processing was executed strictly offline using `airgapllm` (v0.3.0, R 4.6.2) with **zero transmission of research data to external cloud APIs or third-party servers**. Inference was configured for local execution (`backend = "mock"`, endpoint class: `offline_mock`) under hardened container controls (`network_mode = "none"`, read-only root filesystem, all Linux capabilities dropped, `no-new-privileges`, read-only model volume mounts, and offline telemetry suppression). Automated pre-flight isolation checks (`preflight_isolation_check()`) returned **`PASS`** (attestation hash: `sha256:0a3bfa987000101d82bf09e21a2d66d6f945bd18ff95078fa0e3ebd2599d34b5`), confirming strict local/loopback confinement and proxy bypass prior to reading participant text.
+#> All automated natural language processing was executed strictly offline using `airgapllm` (v0.5.0, R 4.6.2) with **zero transmission of research data to external cloud APIs or third-party servers**. Inference was configured for local execution (`backend = "mock"`, endpoint class: `offline_mock`) under hardened container controls (`network_mode = "none"`, read-only root filesystem, all Linux capabilities dropped, `no-new-privileges`, read-only model volume mounts, and offline telemetry suppression). Automated pre-flight isolation checks (`preflight_isolation_check()`) returned **`PASS`** (attestation hash: `sha256:8fe5ce53f979b2a891a7834d9744b61ee067e3b8949e0b14b82b56c6e4729c5b`), confirming strict local/loopback confinement and proxy bypass prior to reading participant text.
 #> 
 #> ### 2. Pre-Inference De-Identification & Privacy Safeguards
 #> 
@@ -109,7 +109,7 @@ cat(generate_irb_narrative(res, protocol_id = "IRB-2026-001"))
 #> 
 #> | Control / Artifact | Verified Value |
 #> | :--- | :--- |
-#> | Isolation Pre-Flight Status | `PASS` (`sha256:0a3bfa987000101d82bf09e21a2d66d6f945bd18ff95078fa0e3ebd2599d34b5`) |
+#> | Isolation Pre-Flight Status | `PASS` (`sha256:8fe5ce53f979b2a891a7834d9744b61ee067e3b8949e0b14b82b56c6e4729c5b`) |
 #> | Endpoint Class | `offline_mock` |
 #> | Container Backend / Network | `mock` / `none` |
 #> | Container Image Digest | `not pinned` |
@@ -122,7 +122,7 @@ cat(generate_irb_narrative(res, protocol_id = "IRB-2026-001"))
 #> | Pre-Inference PII Policy | `redact` (`1` detections) |
 #> | Rows Processed (OK / Failed) | `2` (`2` / `0`) |
 #> | Audit Chain Head Hash | `N/A` |
-#> | Software Environment | `airgapllm 0.3.0` / `R 4.6.2` |
+#> | Software Environment | `airgapllm 0.5.0` / `R 4.6.2` |
 #> 
 #> #### Aggregate Pre-Inference PII Redaction Counts (Zero Raw Values Stored)
 #> 

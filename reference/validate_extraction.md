@@ -63,7 +63,7 @@ validate_extraction('{"label": "maybe", "score": 99}', sc)
 #> NULL
 #> 
 #> $errors
-#> [1] "Field 'label' value 'maybe' is not in allowed enum values [yes, no]."
-#> [2] "Field 'score' value (99) exceeds max (10)."                          
+#> [1] "Field 'label' value is not in allowed enum values [yes, no]."
+#> [2] "Field 'score' value (99) exceeds max (10)."                  
 #> 
 ```

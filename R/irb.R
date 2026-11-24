@@ -63,7 +63,7 @@ generate_irb_narrative <- function(
   audit_chain_head <- NULL
   audit_entries_count <- NULL
 
-  if (inherits(source, "airgap_extraction")) {
+  if (inherits(source, c("airgap_extraction", "airgap_consensus"))) {
     manifest <- extraction_manifest(source)
     ae <- attr(source, "airgap_audit_entry")
     if (!is.null(ae)) {

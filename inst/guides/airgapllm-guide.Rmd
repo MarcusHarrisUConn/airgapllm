@@ -34,7 +34,7 @@ assessment (EMA) journals, patient narratives, and student essays---governed by
 Institutional Review Board (IRB), HIPAA, or FERPA protocols that strictly
 prohibit transmitting participant text to external cloud LLM APIs.
 
-**`airgapllm`** (v0.3.0) provides an auditable, privacy-first R workbench for
+**`airgapllm`** (v0.4.0) provides an auditable, privacy-first R workbench for
 **verifiably offline local LLM inference** across `Ollama`, `llama.cpp`, and
 `vLLM`. Every stage enforces defense-in-depth:
 
@@ -177,6 +177,39 @@ rot[c("old_key_fingerprint", "new_key_fingerprint", "n_tokens")]
 
 # Verify lossless local re-identification under the rotated master key
 identical(pii_reidentify(pse$text, vault = vf, key = k2), synthetic_notes$note_text[1:3])
+```
+
+# Multi-Pass Consensus, k-Anonymity & Hardware Sizing (v0.4.0)
+
+Beyond single-pass extraction and direct-identifier scrubbing, `airgapllm`
+v0.4.0 adds multi-pass self-consistency extraction, quasi-identifier
+$k$-anonymity / $l$-diversity export checks, and hardware-aware local sizing
+and benchmarking:
+
+```{r v04-highlights}
+# 1. Hardware-aware sizing & throughput pilot benchmark
+recommend_runtime_config(vram_gb = 24, ram_gb = 64, n_docs = 5000L, avg_tokens = 1000L)
+benchmark_local_runtime(runtime_mock(seed = 42L), schema, n_sample = 6L, corpus_size = 5000L)
+
+# 2. Multi-pass consensus extraction across 3 deterministic seeds
+cons <- airgap_extract_consensus(
+  synthetic_notes[1:4, ],
+  text_col = "note_text",
+  schema = schema,
+  runtime = runtime_mock(seed = 100L),
+  n_passes = 3L,
+  id_col = "note_id"
+)
+consensus_diagnostics(cons)
+
+# 3. Quasi-identifier k-anonymity & l-diversity export gate
+export_tbl <- tibble::tibble(
+  site = c(rep("North", 6), rep("South", 2), rep("West", 5)),
+  wave = c(rep(1L, 6), rep(2L, 2), rep(1L, 5)),
+  tier = c("low", "high", "low", "mid", "high", "low", "high", "high", "low", "mid", "high", "low", "mid")
+)
+apply_k_anonymity(export_tbl, c("site", "wave"), k_min = 5L,
+                  strategy = "mask_rare", sensitive_col = "tier", l_min = 2L)
 ```
 
 # Pre-Submission IRB Operational Checklist

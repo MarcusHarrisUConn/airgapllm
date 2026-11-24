@@ -9,20 +9,22 @@
 
 ## Core Pillars
 
-1. **Air-Gapped Container Lifecycle & GPU Sizing**
+1. **Air-Gapped Container Lifecycle, Hardware Sizing & Benchmarking**
    - `airgap_container_spec()`, `emit_docker_run()`, `emit_docker_compose()`, and `emit_apptainer_def()` generate digest-pinned, hardened Docker (`--network none`, `--read-only`, `--cap-drop ALL`, `no-new-privileges`, read-only model mounts, offline telemetry suppression, optional NVIDIA/ROCm GPU passthrough) and HPC Apptainer `.def` recipes for `Ollama`, `llama.cpp`, and `vLLM`.
    - `verify_model_digest()` computes streaming SHA-256 digests on local GGUF or sharded safetensors model files without loading weights into RAM, enforcing strict symlink and directory confinement.
    - `preflight_isolation_check()` and `is_loopback_endpoint()` validate container hardening posture, verify model SHA-256 pins, reject SSRF/non-loopback/spoofed URLs, fail closed on unbypassed outbound proxy env vars, and emit a cryptographically hashed (and optionally HMAC-signed) attestation record.
-   - `estimate_vram_requirements()` right-sizes workstation and HPC GPU memory across quantizations (`Q4_K_M`, `Q6_K`, `Q8_0`, `FP16`), context lengths, and batch sizes.
+   - `estimate_vram_requirements()`, `recommend_runtime_config()`, and `benchmark_local_runtime()` right-size workstation and HPC GPUs, auto-tune quantization/batch/context settings, and benchmark throughput, p50/p95 latency, retry rates, and projected corpus ETA.
 
-2. **Pre-Inference Privacy, PII & HIPAA Safe Harbor Engine**
+2. **Pre-Inference Privacy, PII & k-Anonymity Risk Engine**
    - `pii_config()`, `pii_detect()`, `pii_redact()`, `pii_privacy_report()`, and `pii_audit_dataframe()` deterministically scan and scrub emails, SSNs, US/international phone numbers, dates/DOBs, MRNs/student IDs, IPv4/IPv6 addresses, street addresses, **HIPAA Safe Harbor ages > 89 and US ZIP codes / 17 restricted 3-digit prefixes** (`hipaa_restricted_zip3()`), titled/role-cued/unlabeled person names (with Unicode homoglyph & zero-width obfuscator normalization and O(M log M + N) ReDoS-safe execution), plus custom regexes, custom literal dictionaries, and clinical allowlists.
    - `pii_pseudonymize()`, `pii_reidentify()`, `pii_vault_key()`, `pii_vault_save()`, `pii_vault_load()`, and `pii_vault_rotate_key()` implement deterministic keyed reversible pseudonymization using **RFC 5869 HKDF-SHA256 + HMAC-SHA256**, storing raw mappings inside a separate **AES-256-CBC + HMAC-SHA256** (Encrypt-then-MAC with per-save random salts, fresh IVs, AAD binding, constant-time MAC verification, and atomic key rotation) local vault with owner-only (`0600`) permissions.
+   - `assess_reidentification_risk()` and `apply_k_anonymity()` audit quasi-identifiers for $k$-anonymity, prosecutor/journalist re-identification risk, and $l$-diversity, enforcing safe row suppression or progressive rare-class masking prior to table export.
 
-3. **Resumable Schema-Enforced Batch Extractor**
+3. **Resumable Schema-Enforced & Multi-Pass Consensus Batch Extractor**
    - `chunk_clinical_texts()` splits long therapy transcripts and interviews into deterministic paragraph- or sentence-aligned overlapping chunks preserving `doc_id`, `chunk_id`, and offset provenance.
    - `extraction_schema()` and `schema_field()` declare strict scalar types (`character`, `integer`, `numeric`, `logical`, `enum`), nullability, numeric ranges, string lengths, and regex constraints, exporting standard JSON Schema (`as_json_schema()`).
    - `airgap_extract()` processes R data frames (including Latin-1 / Windows-1252 clinical CSV exports and 0-row frames) into strictly typed tibbles with mandatory pre-inference PII controls, delimited `<UNTRUSTED_RESEARCH_RECORD>` prompt-injection framing, **post-inference output PII leakage scanning** (`output_pii_action`), automated structured repair retries (`build_repair_prompt()`), and crash-resumable atomic per-row JSONL checkpointing with schema/prompt compatibility guards.
+   - `airgap_extract_consensus()`, `consensus_passes()`, and `consensus_diagnostics()` run multi-seed / multi-prompt self-consistency consensus extractions with majority vote or median/trimmed-mean aggregation, per-row agreement scores, and long-format pass tables directly compatible with multi-facet psychometric reliability auditing.
    - Pluggable strictly-local runtimes: `runtime_ollama()`, `runtime_openai_local()` (`llama.cpp` / `vLLM`, enforcing canonical loopback hosts and `noproxy = "*"`), and `runtime_mock()` (deterministic offline runtime for testing and dry-runs).
 
 4. **Immutable IRB/HIPAA Audit Trail & Compliance Packets**
@@ -107,6 +109,7 @@ export_irb_compliance_packet(
   - `vignette("privacy-and-compliance", package = "airgapllm")`
   - `vignette("irb-hipaa-compliance-walkthrough", package = "airgapllm")`
   - `vignette("hpc-gpu-deployment", package = "airgapllm")`
+  - `vignette("consensus-and-kanonymity", package = "airgapllm")`
 
 ## License
 

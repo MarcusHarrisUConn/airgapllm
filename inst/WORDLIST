@@ -2,6 +2,8 @@ AAD
 AES
 Allowlists
 Apptainer
+Benchmarker
+Benchmarking
 CFR
 CLI
 CUDA
@@ -18,6 +20,7 @@ GPUs
 GQA
 Gapped
 Gapping
+Generalizability
 HIPAA
 HKDF
 HMAC
@@ -82,6 +85,7 @@ filesystem
 filesystems
 fullwidth
 gapped
+generalizability
 homoglyph
 homoglyphs
 invariants
@@ -96,10 +100,12 @@ obfuscators
 passthrough
 plaintext
 pre
+precisions
 pseudonymization
 pseudonymize
 pseudonymized
 quantizations
+quantized
 regexes
 resumable
 runnable
@@ -115,6 +121,7 @@ tibble
 tibbles
 tmpfs
 unbypassed
+uniques
 untrusted
 uppercased
 userinfo

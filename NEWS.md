@@ -1,3 +1,27 @@
+# airgapllm 0.4.0
+
+## New Research-Workflow Capabilities
+
+* **Quasi-Identifier & k-Anonymity / l-Diversity Risk Auditor (`R/anonymity.R`)**:
+  - Added `assess_reidentification_risk()` quantifying equivalence class distributions, minimum/median $k$, sample uniques, $k$-anonymity violations, prosecutor and journalist re-identification risk metrics, and optional distinct $l$-diversity for sensitive outcomes—never logging raw participant values.
+  - Added `apply_k_anonymity()` supporting safe row suppression (`"suppress_rows"`) and progressive rare-class masking (`"mask_rare"`, automatically absorbing smallest residual classes so masked fallback groups strictly satisfy `k_min` and `l_min`), returning privacy-safe tables alongside before/after risk reductions.
+* **Multi-Pass Consensus & Self-Consistency Extraction (`R/consensus.R`)**:
+  - Added `airgap_extract_consensus()` running deterministic multi-pass extractions across multiple random seeds and/or prompt variants (including full crossed `seeds x prompt_templates` designs), aggregating categorical/logical fields by majority vote (`tie_policy = c("first", "na")`) and numeric/integer fields by median, trimmed mean, or mean.
+  - Added `consensus_passes()` (long-format pass table directly compatible with psychometric generalizability / reliability studies with zero hard dependencies) and `consensus_diagnostics()` (per-field agreement, unanimity, and tie counts), with seamless integration into `extraction_manifest()`, `audit_log_append()`, and `generate_irb_narrative()`.
+* **Hardware-Aware Auto-Tuner & Runtime Benchmarker (`R/benchmark.R`)**:
+  - Added `recommend_runtime_config()` selecting OOM-safe open-weights parameter tiers, quantizations, context windows, batch sizes, KV precisions, and hardened container memory limits for workstation GPUs, multi-GPU HPC nodes, and CPU-only hosts.
+  - Added `benchmark_local_runtime()` profiling pilot throughput (`rows/sec`), p50/p95 latency, schema validation success rate, repair retry rate, and projected full-corpus ETA cleanly on local or mock runtimes.
+
+## Coverage-Driven Bug Fixes & Documentation
+
+* Conducted a comprehensive `covr` audit raising package line coverage from 89.3% to **>94%** and resolving five latent edge cases:
+  - Fixed 0-byte pre-existing checkpoint files failing to initialize a header record before appending rows in `airgap_extract()`.
+  - Hardened output PII masking sentinels when combining `pii_policy = "pseudonymize"` with `output_pii_action = "redact"`.
+  - Added malformed tail guards to `audit_log_append(..., verify_existing = FALSE)`.
+  - Removed unreachable dead branches in `resolve_overlapping_spans()`.
+  - Suppressed spurious base PCRE compilation warnings before throwing structured validation errors on invalid custom regexes in `schema_field()` and `pii_config()`.
+* Added a fifth executable vignette (`vignettes/consensus-and-kanonymity.Rmd`), updated the standalone PDF Field Guide, `pkgdown` reference site, and `README.md`.
+
 # airgapllm 0.3.0
 
 ## Production Clinical & HPC Workflow Capabilities

@@ -116,7 +116,7 @@ scan_metadata_for_pii <- function(x, path = "metadata") {
 #' Normalize and strictly validate an audit payload before writing to ledger
 #' @noRd
 normalize_audit_entry <- function(entry, event_type = "extraction_run", metadata = NULL) {
-  if (inherits(entry, "airgap_extraction")) {
+  if (inherits(entry, c("airgap_extraction", "airgap_consensus"))) {
     entry <- extraction_manifest(entry)
   } else if (inherits(entry, "airgap_preflight")) {
     entry <- list(
@@ -336,6 +336,9 @@ audit_log_append <- function(
       lines <- lines[nzchar(trimws(lines))]
       if (length(lines) > 0L) {
         last_rec <- jsonlite::fromJSON(lines[length(lines)], simplifyVector = FALSE)
+        if (is.null(last_rec$seq) || is.null(last_rec$entry_hash)) {
+          cli::cli_abort("Malformed tail entry in audit log {.path {path}}.", class = "airgap_audit_tamper_error")
+        }
         prev_seq <- as.integer(last_rec$seq)
         prev_hash <- as.character(last_rec$entry_hash)
       }

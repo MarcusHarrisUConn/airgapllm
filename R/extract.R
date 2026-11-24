@@ -88,7 +88,7 @@ scan_and_handle_output_pii <- function(data_list, schema, pii_cfg, pii_policy, a
           tok_m <- gregexpr("<<[A-Z0-9_]+_[0-9a-f]{8,32}>>", val, perl = TRUE)
           toks <- regmatches(val, tok_m)[[1L]]
           if (length(toks) > 0L) {
-            placeholders <- sprintf("__AIRGAP_TOK_%04d__", seq_along(toks))
+            placeholders <- sprintf("{AIRGAPTOK:%04d}", seq_along(toks))
             masked <- val
             for (k in seq_along(toks)) {
               masked <- sub(toks[k], placeholders[k], masked, fixed = TRUE)
@@ -557,6 +557,7 @@ airgap_extract <- function(
   records <- list()
   if (!is.null(checkpoint_path)) {
     assert_scalar_string(checkpoint_path, "checkpoint_path")
+    need_header <- TRUE
     if (isTRUE(resume) && file.exists(checkpoint_path)) {
       ck <- checkpoint_load(
         path = checkpoint_path,
@@ -565,8 +566,12 @@ airgap_extract <- function(
         pii_policy = pii_policy,
         model = runtime$model
       )
-      records <- ck$rows
-    } else {
+      if (isTRUE(ck$exists)) {
+        records <- ck$rows
+        need_header <- FALSE
+      }
+    }
+    if (isTRUE(need_header)) {
       if (file.exists(checkpoint_path)) {
         unlink(checkpoint_path)
       }
@@ -811,8 +816,8 @@ airgap_extract <- function(
 #' extraction_preflight(res)
 #' extraction_manifest(res)$schema_digest
 extraction_manifest <- function(x) {
-  if (!inherits(x, "airgap_extraction")) {
-    cli::cli_abort("{.arg x} must be an `airgap_extraction` object.", class = "airgap_validation_error")
+  if (!inherits(x, c("airgap_extraction", "airgap_consensus"))) {
+    cli::cli_abort("{.arg x} must be an `airgap_extraction` or `airgap_consensus` object.", class = "airgap_validation_error")
   }
   attr(x, "airgap_manifest")
 }
@@ -820,8 +825,8 @@ extraction_manifest <- function(x) {
 #' @rdname extraction_accessors
 #' @export
 extraction_privacy_report <- function(x) {
-  if (!inherits(x, "airgap_extraction")) {
-    cli::cli_abort("{.arg x} must be an `airgap_extraction` object.", class = "airgap_validation_error")
+  if (!inherits(x, c("airgap_extraction", "airgap_consensus"))) {
+    cli::cli_abort("{.arg x} must be an `airgap_extraction` or `airgap_consensus` object.", class = "airgap_validation_error")
   }
   attr(x, "airgap_privacy_report")
 }
@@ -829,8 +834,8 @@ extraction_privacy_report <- function(x) {
 #' @rdname extraction_accessors
 #' @export
 extraction_preflight <- function(x) {
-  if (!inherits(x, "airgap_extraction")) {
-    cli::cli_abort("{.arg x} must be an `airgap_extraction` object.", class = "airgap_validation_error")
+  if (!inherits(x, c("airgap_extraction", "airgap_consensus"))) {
+    cli::cli_abort("{.arg x} must be an `airgap_extraction` or `airgap_consensus` object.", class = "airgap_validation_error")
   }
   attr(x, "airgap_preflight")
 }
@@ -838,8 +843,8 @@ extraction_preflight <- function(x) {
 #' @rdname extraction_accessors
 #' @export
 extraction_vault <- function(x) {
-  if (!inherits(x, "airgap_extraction")) {
-    cli::cli_abort("{.arg x} must be an `airgap_extraction` object.", class = "airgap_validation_error")
+  if (!inherits(x, c("airgap_extraction", "airgap_consensus"))) {
+    cli::cli_abort("{.arg x} must be an `airgap_extraction` or `airgap_consensus` object.", class = "airgap_validation_error")
   }
   attr(x, "airgap_vault")
 }

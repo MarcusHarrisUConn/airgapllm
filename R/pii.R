@@ -149,7 +149,7 @@ pii_config <- function(
         cli::cli_abort("Custom pattern {.val {nm}} must be a non-empty string.", class = "airgap_validation_error")
       }
       tryCatch(
-        grepl(pat, "", perl = TRUE),
+        suppressWarnings(grepl(pat, "", perl = TRUE)),
         error = function(e) {
           cli::cli_abort(
             c("Invalid PCRE regular expression in `custom_patterns[['{nm}']]`.", "x" = conditionMessage(e)),
@@ -320,23 +320,17 @@ resolve_overlapping_spans <- function(spans) {
     if (pos >= 1L && ke[pos] >= s_i) next
     if (pos < n_kept && ks[pos + 1L] <= e_i) next
 
-    # Insert in sorted position (pos + 1)
+    # Insert in sorted position (pos + 1); since s_i <= max_end and spans are disjoint,
+    # pos is guaranteed strictly less than old n_kept and e_i < max_end
     n_kept <- n_kept + 1L
-    if (pos == n_kept - 1L) {
-      kept_idx[n_kept] <- i
-      kept_s[n_kept] <- s_i
-      kept_e[n_kept] <- e_i
-    } else {
-      shift_from <- (pos + 1L):(n_kept - 1L)
-      shift_to <- (pos + 2L):n_kept
-      kept_idx[shift_to] <- kept_idx[shift_from]
-      kept_s[shift_to] <- kept_s[shift_from]
-      kept_e[shift_to] <- kept_e[shift_from]
-      kept_idx[pos + 1L] <- i
-      kept_s[pos + 1L] <- s_i
-      kept_e[pos + 1L] <- e_i
-    }
-    if (e_i > max_end) max_end <- e_i
+    shift_from <- (pos + 1L):(n_kept - 1L)
+    shift_to <- (pos + 2L):n_kept
+    kept_idx[shift_to] <- kept_idx[shift_from]
+    kept_s[shift_to] <- kept_s[shift_from]
+    kept_e[shift_to] <- kept_e[shift_from]
+    kept_idx[pos + 1L] <- i
+    kept_s[pos + 1L] <- s_i
+    kept_e[pos + 1L] <- e_i
   }
 
   spans[kept_idx[seq_len(n_kept)]]

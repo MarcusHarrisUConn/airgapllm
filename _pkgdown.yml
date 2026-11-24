@@ -30,10 +30,11 @@ articles:
       - privacy-and-compliance
       - irb-hipaa-compliance-walkthrough
       - hpc-gpu-deployment
+      - consensus-and-kanonymity
 
 reference:
-  - title: Air-Gapped Container Lifecycle & GPU Sizing
-    desc: Generate pinned, network-isolated Docker and HPC Apptainer configurations, verify model SHA-256 digests, and right-size GPUs.
+  - title: Air-Gapped Container Lifecycle, Hardware Sizing & Benchmarking
+    desc: Generate pinned, network-isolated Docker and HPC Apptainer configurations, verify model SHA-256 digests, auto-tune local hardware, and benchmark runtime throughput.
     contents:
       - airgap_container_spec
       - emit_docker_run
@@ -43,8 +44,10 @@ reference:
       - is_loopback_endpoint
       - preflight_isolation_check
       - estimate_vram_requirements
-  - title: Pre-Inference Privacy, PII & HIPAA Safe Harbor
-    desc: Deterministic pure-R PII detection, redaction, HIPAA Safe Harbor rules (ages > 89 & restricted ZIP3), and zero-PII pre-run audits.
+      - recommend_runtime_config
+      - benchmark_local_runtime
+  - title: Pre-Inference Privacy, PII & k-Anonymity Risk Engine
+    desc: Deterministic pure-R PII detection, HIPAA Safe Harbor rules (ages > 89 & restricted ZIP3), zero-PII pre-run audits, and quasi-identifier k-anonymity / l-diversity export controls.
     contents:
       - pii_default_entities
       - hipaa_restricted_zip3
@@ -53,6 +56,8 @@ reference:
       - pii_redact
       - pii_privacy_report
       - pii_audit_dataframe
+      - assess_reidentification_risk
+      - apply_k_anonymity
   - title: Keyed Pseudonymization & Encrypted Vaults
     desc: Reversible RFC 5869 HKDF-SHA256 + HMAC-SHA256 pseudonymization with AES-256-CBC Encrypt-then-MAC vaults and atomic key rotation.
     contents:
@@ -62,8 +67,8 @@ reference:
       - pii_vault_save
       - pii_vault_load
       - pii_vault_rotate_key
-  - title: Resumable Schema-Enforced Batch Extraction
-    desc: Long-transcript chunking, strict typed schemas, automated structured repair retries, and atomic JSONL crash-resumable batch extraction.
+  - title: Resumable Schema-Enforced & Consensus Batch Extraction
+    desc: Long-transcript chunking, strict typed schemas, automated structured repair retries, atomic JSONL crash-resumable batch extraction, and multi-pass self-consistency consensus coding.
     contents:
       - chunk_clinical_texts
       - schema_field
@@ -73,6 +78,8 @@ reference:
       - build_repair_prompt
       - airgap_extract
       - extraction_accessors
+      - airgap_extract_consensus
+      - consensus_accessors
   - title: Local Air-Gapped Inference Runtimes
     desc: Loopback-only local HTTP backends (Ollama, llama.cpp, vLLM) and deterministic offline mock runtime.
     contents:

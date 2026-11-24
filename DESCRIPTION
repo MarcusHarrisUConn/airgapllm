@@ -1,6 +1,6 @@
 Package: airgapllm
 Title: Verifiably Offline Containerized Local LLM Workflows
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: 
     person("Marcus", "Harris", , "marcus.harris.uconn@gmail.com", role = c("aut", "cre", "cph"))
 Description: Provides a privacy-first workbench for running verifiably offline,

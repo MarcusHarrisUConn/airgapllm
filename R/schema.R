@@ -76,7 +76,7 @@ schema_field <- function(
     }
     assert_scalar_string(pattern, "pattern")
     tryCatch(
-      grepl(pattern, "", perl = TRUE),
+      suppressWarnings(grepl(pattern, "", perl = TRUE)),
       error = function(e) {
         cli::cli_abort("Invalid PCRE regex in {.arg pattern}: {conditionMessage(e)}", class = "airgap_validation_error")
       }

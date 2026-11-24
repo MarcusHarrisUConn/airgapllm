@@ -1,0 +1,214 @@
+---
+title: "Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Multi-Pass Consensus Extraction, k-Anonymity Export Checks, and Local Hardware Sizing}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+Once a research lab has verified offline network isolation and scrubbed direct
+identifiers under HIPAA Safe Harbor, three practical questions remain before
+running production extractions and sharing derived tables with collaborators:
+
+1. **How reliable are local 7B–14B open-weights extractions across seeds and
+   prompt phrasings?** Use `airgap_extract_consensus()` to execute crossed
+   multi-pass self-consistency runs and inspect per-row agreement and
+   long-format pass reliability data.
+2. **Could indirect quasi-identifiers (`site`, `age_band`, `wave`, `zip3`)
+   re-identify individuals in an exported analytic table?** Audit tables with
+   `assess_reidentification_risk()` and enforce $k$-anonymity and
+   $l$-diversity with `apply_k_anonymity()`.
+3. **Which quantization, context window, and batch size best fit our lab GPU
+   or HPC allocation—and how long will 10,000 rows take?** Size hardware with
+   `recommend_runtime_config()` and measure real pilot throughput with
+   `benchmark_local_runtime()`.
+
+```{r load}
+library(airgapllm)
+library(tibble)
+data("synthetic_notes", package = "airgapllm")
+```
+
+## 1. Multi-Pass Self-Consistency & Consensus Extraction
+
+Local quantized models can exhibit occasional stochastic or prompt-framing
+sensitivity on borderline clinical notes. `airgap_extract_consensus()` runs a
+deterministic grid of random `seeds` and/or `prompt_templates` over the
+already-sanitized corpus, aggregating categorical/logical fields by majority
+vote and numeric/integer fields by median or trimmed mean:
+
+```{r consensus}
+clinical_schema <- extraction_schema(
+  sentiment = schema_field("enum", values = c("positive", "neutral", "negative")),
+  severity = schema_field("integer", min = 0L, max = 10L),
+  crisis_flag = schema_field("logical"),
+  name = "consensus_coding_v1"
+)
+
+prompts <- c(
+  concise = "Classify sentiment, severity (0-10), and crisis_flag from this record:\n{text}",
+  clinical = "As a clinical rater, return strict JSON coding for this note:\n{text}"
+)
+
+work_dir <- tempfile("airgap_v04_")
+dir.create(work_dir)
+audit_file <- file.path(work_dir, "consensus_audit.jsonl")
+
+# 2 prompts x 2 seeds = 4 crossed passes per document
+cons_res <- airgap_extract_consensus(
+  data = synthetic_notes[1:6, ],
+  text_col = "note_text",
+  schema = clinical_schema,
+  runtime = runtime_mock(model = "llama3.1:8b-instruct-q4_K_M", seed = 100L),
+  seeds = c(100L, 200L),
+  prompt_templates = prompts,
+  id_col = "note_id",
+  numeric_agg = "median",
+  tie_policy = "first",
+  audit_log_path = audit_file
+)
+
+cons_res
+```
+
+Inspect field-level consensus diagnostics and the long-format pass table
+(`unit_id`, `pass_id`, `prompt_id`, `seed`, plus all typed schema columns),
+which is directly structured for multi-facet psychometric reliability modeling
+(such as Generalizability Theory / G-studies):
+
+```{r consensus-diag}
+consensus_diagnostics(cons_res)
+head(consensus_passes(cons_res), 8L)
+audit_log_verify(audit_file)
+```
+
+## 2. Quasi-Identifier $k$-Anonymity & $l$-Diversity Export Audits
+
+Removing direct identifiers (names, emails, SSNs, MRNs) does **not** guarantee
+anonymity if combinations of indirect quasi-identifiers (such as study `site`,
+`age_band`, and `wave`) single out small subgroups.
+
+Consider a synthetic extracted clinical table prepared for secondary analysis:
+
+```{r reid-risk}
+export_df <- tibble(
+  site = c(rep("Site_North", 6), rep("Site_South", 2), "Site_East", rep("Site_West", 5)),
+  age_band = c(rep("30-39", 6), rep("50-59", 2), "70-79", rep("30-39", 5)),
+  severity_tier = c(
+    "mild", "moderate", "mild", "mild", "severe", "moderate",
+    "severe", "severe",
+    "severe",
+    "mild", "moderate", "severe", "mild", "moderate"
+  )
+)
+
+# Audit against k >= 5 anonymity and l >= 2 distinct severity outcomes per class
+risk_before <- assess_reidentification_risk(
+  data = export_df,
+  quasi_ids = c("site", "age_band"),
+  k_min = 5L,
+  sensitive_col = "severity_tier",
+  l_min = 2L
+)
+risk_before
+```
+
+Notice that `Site_South` ($k = 2$, $l = 1$) and `Site_East` ($k = 1$, a sample
+unique with prosecutor risk $1.00$) fail both $k$-anonymity and $l$-diversity.
+Compare the two safe mitigation strategies in `apply_k_anonymity()`:
+
+```{r apply-k}
+# Option A: Suppress violating rows cleanly
+suppressed <- apply_k_anonymity(
+  data = export_df,
+  quasi_ids = c("site", "age_band"),
+  k_min = 5L,
+  strategy = "suppress_rows",
+  sensitive_col = "severity_tier",
+  l_min = 2L
+)
+suppressed
+
+# Option B: Mask rare classes (progressively absorbing smallest residual class so
+# the masked fallback class itself strictly satisfies k >= 5 and l >= 2)
+masked <- apply_k_anonymity(
+  data = export_df,
+  quasi_ids = c("site", "age_band"),
+  k_min = 5L,
+  strategy = "mask_rare",
+  sensitive_col = "severity_tier",
+  l_min = 2L
+)
+masked
+```
+
+Both strategies reduce maximum prosecutor risk from `1.0000` to `<= 0.2000` and
+achieve `PASS` on both $k$-anonymity and $l$-diversity without logging any raw
+participant values.
+
+## 3. Hardware-Aware Auto-Tuning & Throughput Benchmarking
+
+Before launching a 10,000-row extraction job on a lab workstation or university
+HPC GPU node, query `recommend_runtime_config()` to select an OOM-safe
+parameter tier, quantization, context window, batch size, and container memory
+limits:
+
+```{r auto-tuner}
+# Single 24 GB lab workstation GPU (e.g., RTX 4090 / L4)
+rec_ws <- recommend_runtime_config(
+  vram_gb = 24,
+  ram_gb = 64,
+  n_gpus = 1L,
+  n_docs = 10000L,
+  avg_tokens = 1100L,
+  priority = "balanced",
+  backend = "ollama"
+)
+rec_ws
+
+# Multi-GPU HPC node (2x 80 GB A100/H100) tuned for accuracy on vLLM
+rec_hpc <- recommend_runtime_config(
+  vram_gb = 80,
+  ram_gb = 256,
+  n_gpus = 2L,
+  n_docs = 25000L,
+  avg_tokens = 1500L,
+  priority = "accuracy",
+  backend = "vllm"
+)
+rec_hpc
+```
+
+Finally, run a quick pilot benchmark via `benchmark_local_runtime()` to measure
+empirical throughput, p50/p95 per-row latency, repair retry rate, and projected
+walltime ETA for your full corpus:
+
+```{r benchmark}
+bm <- benchmark_local_runtime(
+  runtime = runtime_mock(
+    model = "llama3.1:8b-instruct-q4_K_M",
+    seed = 42L,
+    malform_schedule = list(BM_0002 = c("{invalid_json"))
+  ),
+  schema = clinical_schema,
+  data = synthetic_notes,
+  text_col = "note_text",
+  n_sample = 8L,
+  corpus_size = 10000L
+)
+bm
+```
+
+```{r cleanup, include = FALSE}
+unlink(work_dir, recursive = TRUE)
+```

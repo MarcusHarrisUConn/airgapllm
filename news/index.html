@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -45,6 +45,10 @@
       <small>Source: <a href="https://github.com/MarcusHarrisUConn/airgapllm/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.5.2" id="airgapllm-052">airgapllm 0.5.2<a class="anchor" aria-label="anchor" href="#airgapllm-052"></a></h2>
+<ul><li>Upgraded <code>is_symlink_path()</code> in <code>R/security.R</code> with canonical parent-vs-self reparse-point comparison to reliably detect Windows NTFS file symlinks (while excluding Windows 8.3 short-name directory aliases like <code>RUNNER~1</code>), fixed case-insensitive <code>NO_PROXY</code>/<code>no_proxy</code> env var setup in Windows tests, and relaxed the shared-VM ReDoS timing ceiling from 2s to 10s.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.5.1" id="airgapllm-051">airgapllm 0.5.1<a class="anchor" aria-label="anchor" href="#airgapllm-051"></a></h2>
 <div class="section level3">

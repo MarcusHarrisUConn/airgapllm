@@ -76,8 +76,8 @@ key <- pii_vault_key()
 docs <- c("Dr. Jane Doe called (555) 234-5678.", "Follow-up with Dr. Jane Doe.")
 res <- pii_pseudonymize(docs, key = key)
 res$text
-#> [1] "<<PERSON_NAME_af1025f774>> called <<PHONE_ecb4dbbdfe>>."
-#> [2] "Follow-up with <<PERSON_NAME_af1025f774>>."             
+#> [1] "<<PERSON_NAME_12adf59a96>> called <<PHONE_16aa6e6107>>."
+#> [2] "Follow-up with <<PERSON_NAME_12adf59a96>>."             
 pii_reidentify(res$text, res$vault)
 #> [1] "Dr. Jane Doe called (555) 234-5678." "Follow-up with Dr. Jane Doe."       
 ```

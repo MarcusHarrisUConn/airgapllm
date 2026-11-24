@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -175,15 +175,15 @@ file:</p>
 <span></span>
 <span><span class="co"># Pseudonymized text preserves coreference for Dr. Elena Vance across rows 1 &amp; 2</span></span>
 <span><span class="va">pse</span><span class="op">$</span><span class="va">text</span></span>
-<span><span class="co">#&gt; [1] "At &lt;&lt;CLINIC_8694bb8ec1&gt;&gt; (&lt;&lt;COHORT_ID_f7652d609c&gt;&gt;), &lt;&lt;PERSON_NAME_d4d76dd643&gt;&gt; administered the Beck Depression Inventory."</span></span>
-<span><span class="co">#&gt; [2] "Follow-up with &lt;&lt;PERSON_NAME_d4d76dd643&gt;&gt; at &lt;&lt;EMAIL_083c98abd7&gt;&gt;; SSN &lt;&lt;SSN_ea6c8f0c03&gt;&gt; confirmed."                       </span></span>
+<span><span class="co">#&gt; [1] "At &lt;&lt;CLINIC_490bbc8248&gt;&gt; (&lt;&lt;COHORT_ID_02e508a5c5&gt;&gt;), &lt;&lt;PERSON_NAME_a9c2c8fb88&gt;&gt; administered the Beck Depression Inventory."</span></span>
+<span><span class="co">#&gt; [2] "Follow-up with &lt;&lt;PERSON_NAME_a9c2c8fb88&gt;&gt; at &lt;&lt;EMAIL_4d490cce0b&gt;&gt;; SSN &lt;&lt;SSN_e22f00bcbd&gt;&gt; confirmed."                       </span></span>
 <span><span class="co">#&gt; [3] "Participant drank Dr. Pepper before session; Major Depressive Disorder symptoms stable."</span></span>
 <span></span>
 <span><span class="co"># Printing the vault NEVER exposes raw sensitive mappings</span></span>
 <span><span class="va">pse</span><span class="op">$</span><span class="va">vault</span></span>
 <span><span class="co">#&gt; &lt;airgap_pii_vault&gt; (sensitive mappings hidden)</span></span>
-<span><span class="co">#&gt;   Vault ID:        vault_20261124T214338Z_eada1e9b</span></span>
-<span><span class="co">#&gt;   Key fingerprint: e919ea420e785568</span></span>
+<span><span class="co">#&gt;   Vault ID:        vault_20261124T215243Z_26bb1181</span></span>
+<span><span class="co">#&gt;   Key fingerprint: a0a9bbdc697a14b4</span></span>
 <span><span class="co">#&gt;   Stored tokens:   5</span></span>
 <span><span class="co">#&gt;   By entity type:  clinic=1, cohort_id=1, email=1, person_name=1, ssn=1</span></span></code></pre></div>
 <p>When authorized analysts need to restore original labels locally
@@ -268,15 +268,15 @@ resume seamlessly:</p>
 <span><span class="co">#&gt; [1] 0</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $elapsed_sec</span></span>
-<span><span class="co">#&gt; [1] 0.009</span></span>
+<span><span class="co">#&gt; [1] 0.01</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $rows_per_sec</span></span>
-<span><span class="co">#&gt; [1] 555.56</span></span>
+<span><span class="co">#&gt; [1] 500</span></span>
 <span><span class="va">resumed</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 8 × 8</span></span></span>
 <span><span class="co">#&gt;   doc_id  affect   stress social_support .status .attempts .error .elapsed_ms</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;lgl&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>       <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>        <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> EMA_001 neutral       2 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               2</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> EMA_001 neutral       2 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               3</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> EMA_002 negative      3 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> EMA_003 negative      2 TRUE           ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> EMA_004 negative      3 FALSE          ok              1 <span style="color: #BB0000;">NA</span>               1</span></span>
@@ -298,30 +298,30 @@ invalidates the cryptographic chain and is caught immediately by
 <span></span>
 <span><span class="fu"><a href="../reference/audit_log_append.html">audit_log_append</a></span><span class="op">(</span><span class="va">audit_file</span>, <span class="va">resumed</span>, metadata <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>site <span class="op">=</span> <span class="st">"Site-A"</span>, wave <span class="op">=</span> <span class="st">"Wave-1"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_entry&gt; #1 [extraction_run]</span></span>
-<span><span class="co">#&gt;   Run ID:       run_20261124T214339Z_ef86326f</span></span>
-<span><span class="co">#&gt;   Timestamp:    2026-11-24T21:43:39Z</span></span>
+<span><span class="co">#&gt;   Run ID:       run_20261124T215243Z_afe70b53</span></span>
+<span><span class="co">#&gt;   Timestamp:    2026-11-24T21:52:43Z</span></span>
 <span><span class="co">#&gt;   Isolation:    PASS</span></span>
 <span><span class="co">#&gt;   PII policy:   redact</span></span>
 <span><span class="co">#&gt;   Prev hash:    GENESIS</span></span>
-<span><span class="co">#&gt;   Entry hash:   sha256:5e3e9f5346f151103367612fcbff351a840e14bbefcadded3685f0f4828d6a56</span></span>
+<span><span class="co">#&gt;   Entry hash:   sha256:eadcc825835f3d7d7b720a229ac2a5b052279e2a56b03f7e9fca28c8b1d89b36</span></span>
 <span><span class="fu"><a href="../reference/audit_log_append.html">audit_log_append</a></span><span class="op">(</span></span>
 <span>  <span class="va">audit_file</span>,</span>
 <span>  <span class="fu"><a href="../reference/preflight_isolation_check.html">preflight_isolation_check</a></span><span class="op">(</span>endpoint <span class="op">=</span> <span class="st">"http://127.0.0.1:11434"</span><span class="op">)</span>,</span>
 <span>  metadata <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>site <span class="op">=</span> <span class="st">"Site-A"</span><span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_entry&gt; #2 [preflight_check]</span></span>
-<span><span class="co">#&gt;   Run ID:       preflight_20261124T214339Z_0fea7958</span></span>
-<span><span class="co">#&gt;   Timestamp:    2026-11-24T21:43:39Z</span></span>
+<span><span class="co">#&gt;   Run ID:       preflight_20261124T215243Z_7b8dfaa4</span></span>
+<span><span class="co">#&gt;   Timestamp:    2026-11-24T21:52:43Z</span></span>
 <span><span class="co">#&gt;   Isolation:    PASS</span></span>
 <span><span class="co">#&gt;   PII policy:   NA</span></span>
-<span><span class="co">#&gt;   Prev hash:    sha256:5e3e9f5346f151103</span></span>
-<span><span class="co">#&gt;   Entry hash:   sha256:d56e0a508c04540bff6946bed44b1a26a9c07fa4e4053073d71c802d98d8f630</span></span>
+<span><span class="co">#&gt;   Prev hash:    sha256:eadcc825835f3d7d7</span></span>
+<span><span class="co">#&gt;   Entry hash:   sha256:da0d7f34b308dc53a7e77d528f3dade03687ffb2431e1065e5d8f01ee138e6fe</span></span>
 <span></span>
 <span><span class="co"># Clean ledger verifies as VALID</span></span>
 <span><span class="fu"><a href="../reference/audit_log_verify.html">audit_log_verify</a></span><span class="op">(</span><span class="va">audit_file</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_verification&gt; [VALID]</span></span>
 <span><span class="co">#&gt;   Entries verified: 2</span></span>
-<span><span class="co">#&gt;   Chain head hash:  sha256:d56e0a508c04540bff6946bed44b1a26a9c07fa4e4053073d71c802d98d8f630</span></span>
+<span><span class="co">#&gt;   Chain head hash:  sha256:da0d7f34b308dc53a7e77d528f3dade03687ffb2431e1065e5d8f01ee138e6fe</span></span>
 <span></span>
 <span><span class="co"># Simulate post-hoc tampering on line 1</span></span>
 <span><span class="va">tampered_file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".tampered.jsonl"</span><span class="op">)</span></span>
@@ -332,9 +332,9 @@ invalidates the cryptographic chain and is caught immediately by
 <span><span class="fu"><a href="../reference/audit_log_verify.html">audit_log_verify</a></span><span class="op">(</span><span class="va">tampered_file</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_verification&gt; [TAMPERED / INVALID]</span></span>
 <span><span class="co">#&gt;   Entries verified: 2</span></span>
-<span><span class="co">#&gt;   Chain head hash:  sha256:d56e0a508c04540bff6946bed44b1a26a9c07fa4e4053073d71c802d98d8f630</span></span>
+<span><span class="co">#&gt;   Chain head hash:  sha256:da0d7f34b308dc53a7e77d528f3dade03687ffb2431e1065e5d8f01ee138e6fe</span></span>
 <span><span class="co">#&gt;   First invalid:    line 1</span></span>
-<span><span class="co">#&gt;   [!] Line 1: Hash mismatch (tampered entry): stored sha256:5e3e9f5346f151103367612fcbff351a840e14bbefcadded3685f0f4828d6a56 != computed sha256:3b8b6e446c849f8a1b2d4d60fa08cbacdc427bca0edb4fa7e2f1cf36a8bf89f2.</span></span></code></pre></div>
+<span><span class="co">#&gt;   [!] Line 1: Hash mismatch (tampered entry): stored sha256:eadcc825835f3d7d7b720a229ac2a5b052279e2a56b03f7e9fca28c8b1d89b36 != computed sha256:15bbca5be837e0a1095f88d3d4c67210ff5b0fac69413f5aba4d7b5101d360b8.</span></span></code></pre></div>
 <p>Attempting to write raw text keys or PII into an audit log is
 rejected before touching disk:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">

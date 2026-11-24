@@ -109,7 +109,7 @@ bm
 #> <airgap_benchmark> [mock | mock-llama-3.1-8b-instruct-q4]
 #>   Sample rows:     6 (succeeded=6 [100%], failed=0)
 #>   Repair retries:  0 total (0% of rows retried)
-#>   Throughput:      400.00 rows/sec (elapsed=0.015s)
-#>   Latency (ms):    p50=0.5 | p95=1 | mean=0.5 (range 0-1)
-#>   Projected ETA:   12.5 sec for 5000 rows
+#>   Throughput:      375.00 rows/sec (elapsed=0.016s)
+#>   Latency (ms):    p50=1 | p95=1 | mean=0.83 (range 0-1)
+#>   Projected ETA:   13.3 sec for 5000 rows
 ```

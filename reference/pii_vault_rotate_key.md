@@ -56,7 +56,7 @@ vf <- tempfile(fileext = ".vault.json")
 pse <- pii_pseudonymize("Patient Jane Doe (jane@example.org)", key = k1, vault_path = vf)
 rot <- pii_vault_rotate_key(vf, old_key = k1, new_key = k2)
 rot$new_key_fingerprint
-#> [1] "0042e770268ab5dc"
+#> [1] "cd30e3b252972841"
 pii_reidentify(pse$text, vault = vf, key = k2)
 #> [1] "Patient Jane Doe (jane@example.org)"
 unlink(vf)

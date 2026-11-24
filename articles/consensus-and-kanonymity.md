@@ -121,7 +121,7 @@ head(consensus_passes(cons_res), 8L)
 audit_log_verify(audit_file)
 #> <airgap_audit_verification> [VALID]
 #>   Entries verified: 1
-#>   Chain head hash:  sha256:7e30aab4326e0f730c4363023371db1c640c3e451f0baae01477cea47faf3f43
+#>   Chain head hash:  sha256:566977e5385742f8ad91d3e75c28739b39f3440bc35e5b8201559f14640d5d66
 ```
 
 ## 2. Quasi-Identifier $`k`$-Anonymity & $`l`$-Diversity Export Audits
@@ -281,6 +281,6 @@ bm
 #>   Sample rows:     8 (succeeded=8 [100%], failed=0)
 #>   Repair retries:  1 total (12.5% of rows retried)
 #>   Throughput:      296.30 rows/sec (elapsed=0.027s)
-#>   Latency (ms):    p50=1 | p95=3.6 | mean=1.25 (range 0-5)
+#>   Latency (ms):    p50=1 | p95=3.3 | mean=1.5 (range 1-4)
 #>   Projected ETA:   33.7 sec for 10000 rows
 ```

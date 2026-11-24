@@ -107,9 +107,9 @@ pkt <- export_irb_compliance_packet(
 )
 pkt
 #> <airgap_compliance_packet> [AUDIT: VERIFIED]
-#>   Directory:     /tmp/RtmpYwr7Bt/demo_irb_packet
+#>   Directory:     /tmp/RtmpfjVEMS/demo_irb_packet
 #>   Artifacts:     4 file(s) + packet_manifest.json
-#>   Audit head:    sha256:3411d24d72302e5d7852c8bfbfd277c0920a43145f9b4e24f16d8f8b8ba84e03
-#>   Packet digest: sha256:59b0341356a3917df7abfb8e4256aa8fecd1d8a81e505a556cd40ca2fa36e8f0
+#>   Audit head:    sha256:417b764edc574dc4a50db1d0c95f6c977672d19674ea26eb8029b6a5bdd499ba
+#>   Packet digest: sha256:636b32c9213ce62328438b87bdc4a53c7d809ddb9ac459458a55892f717c6799
 unlink(pkt_dir, recursive = TRUE)
 ```

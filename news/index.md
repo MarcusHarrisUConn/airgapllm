@@ -1,5 +1,14 @@
 # Changelog
 
+## airgapllm 0.5.2
+
+- Upgraded `is_symlink_path()` in `R/security.R` with canonical
+  parent-vs-self reparse-point comparison to reliably detect Windows
+  NTFS file symlinks (while excluding Windows 8.3 short-name directory
+  aliases like `RUNNER~1`), fixed case-insensitive `NO_PROXY`/`no_proxy`
+  env var setup in Windows tests, and relaxed the shared-VM ReDoS timing
+  ceiling from 2s to 10s.
+
 ## airgapllm 0.5.1
 
 ### Cross-Platform Windows CI Compatibility Fixes

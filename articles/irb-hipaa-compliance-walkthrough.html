@@ -21,7 +21,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">airgapllm</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.5.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -234,8 +234,8 @@ tokens seamlessly re-identifiable:</p>
 <span><span class="op">)</span></span>
 <span><span class="va">pse</span><span class="op">$</span><span class="va">vault</span></span>
 <span><span class="co">#&gt; &lt;airgap_pii_vault&gt; (sensitive mappings hidden)</span></span>
-<span><span class="co">#&gt;   Vault ID:        vault_20261124T214336Z_f4e46a20</span></span>
-<span><span class="co">#&gt;   Key fingerprint: 260fecc27b13fb83</span></span>
+<span><span class="co">#&gt;   Vault ID:        vault_20261124T215240Z_8293f901</span></span>
+<span><span class="co">#&gt;   Key fingerprint: 2a11cc861345847e</span></span>
 <span><span class="co">#&gt;   Stored tokens:   12</span></span>
 <span><span class="co">#&gt;   By entity type:  age_over_89=2, date=2, email=1, mrn_id=1, person_name=2, phone=1, ssn=1, street_address=1, zip_code=1</span></span>
 <span></span>
@@ -244,13 +244,13 @@ tokens seamlessly re-identifiable:</p>
 <span><span class="va">rot</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/pii_vault_rotate_key.html">pii_vault_rotate_key</a></span><span class="op">(</span><span class="va">vault_path</span>, old_key <span class="op">=</span> <span class="va">key_wave1</span>, new_key <span class="op">=</span> <span class="va">key_wave2</span><span class="op">)</span></span>
 <span><span class="va">rot</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"vault_id"</span>, <span class="st">"old_key_fingerprint"</span>, <span class="st">"new_key_fingerprint"</span>, <span class="st">"n_tokens"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt; $vault_id</span></span>
-<span><span class="co">#&gt; [1] "vault_20261124T214336Z_f4e46a20"</span></span>
+<span><span class="co">#&gt; [1] "vault_20261124T215240Z_8293f901"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $old_key_fingerprint</span></span>
-<span><span class="co">#&gt; [1] "260fecc27b13fb83"</span></span>
+<span><span class="co">#&gt; [1] "2a11cc861345847e"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $new_key_fingerprint</span></span>
-<span><span class="co">#&gt; [1] "cb4d981efeeed23e"</span></span>
+<span><span class="co">#&gt; [1] "6f11e21b8984c6d9"</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $n_tokens</span></span>
 <span><span class="co">#&gt; [1] 12</span></span>
@@ -321,7 +321,7 @@ memorized PII is scrubbed before hitting disk or returning to R:</p>
 <span><span class="fu"><a href="../reference/audit_log_verify.html">audit_log_verify</a></span><span class="op">(</span><span class="va">audit_path</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;airgap_audit_verification&gt; [VALID]</span></span>
 <span><span class="co">#&gt;   Entries verified: 1</span></span>
-<span><span class="co">#&gt;   Chain head hash:  sha256:9d90196ba0e4099de019286db47873188c41c229bde24af2f5420541814915aa</span></span></code></pre></div>
+<span><span class="co">#&gt;   Chain head hash:  sha256:074a32015e59cc7ebe4eb97efe3f603d8949a426ca82791d7490de20c0583aea</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="step-5-export-a-self-contained-sha-256-sealed-irb-compliance-packet">Step 5: Export a Self-Contained, SHA-256-Sealed IRB Compliance
@@ -348,21 +348,21 @@ self-contained, zero-PII review directory via
 <span></span>
 <span><span class="va">pkt</span></span>
 <span><span class="co">#&gt; &lt;airgap_compliance_packet&gt; [AUDIT: VERIFIED]</span></span>
-<span><span class="co">#&gt;   Directory:     /tmp/RtmpHIJBi9/airgap_irb_walkthrough_1d8ba3def15/irb_submission_packet</span></span>
+<span><span class="co">#&gt;   Directory:     /tmp/RtmpdT9OMK/airgap_irb_walkthrough_1d43cdcd6dc/irb_submission_packet</span></span>
 <span><span class="co">#&gt;   Artifacts:     7 file(s) + packet_manifest.json</span></span>
-<span><span class="co">#&gt;   Audit head:    sha256:9d90196ba0e4099de019286db47873188c41c229bde24af2f5420541814915aa</span></span>
-<span><span class="co">#&gt;   Packet digest: sha256:61198eb713ea721af02de603dd417e49227d32c016514d12c995e6068a47685d</span></span>
+<span><span class="co">#&gt;   Audit head:    sha256:074a32015e59cc7ebe4eb97efe3f603d8949a426ca82791d7490de20c0583aea</span></span>
+<span><span class="co">#&gt;   Packet digest: sha256:f5a0840aca6c7d4fd4a768b94294be2b7927d5e36f711daa2e7d23af31ab896b</span></span>
 <span><span class="va">pkt</span><span class="op">$</span><span class="va">files</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 7 × 3</span></span></span>
 <span><span class="co">#&gt;   file                       size_bytes sha256                                  </span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                           <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>                                   </span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> audit_log.jsonl                  <span style="text-decoration: underline;">1</span>517 sha256:c3d9fe02952ca2c1420bd0d224c42be5…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> container_apptainer.def          <span style="text-decoration: underline;">1</span>040 sha256:d574f5d2268124e079fbd2c954508781…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> container_docker_run.sh           637 sha256:a8551f9fd3be621b107bfb1c4f91a32e…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> docker-compose.yml                945 sha256:327ac8de475168269f085dad0475d04d…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> irb_protocol_narrative.md        <span style="text-decoration: underline;">5</span>121 sha256:5cd0bf258cb759477151118ea5565097…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> irb_protocol_narrative.qmd       <span style="text-decoration: underline;">5</span>268 sha256:f1fbe05421ad214671c745b207b1c99e…</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span> preflight_attestation.json       <span style="text-decoration: underline;">2</span>327 sha256:6527eb38e048e21ff91ffac6f9980edf…</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> audit_log.jsonl                  <span style="text-decoration: underline;">1</span>517 sha256:02db0dbbbebcc75635adcbba82e12809…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> container_apptainer.def          <span style="text-decoration: underline;">1</span>040 sha256:5278b2db9316f492867c42bfeac39165…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> container_docker_run.sh           637 sha256:031620afc4901c5d9335b7f65ecc875d…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> docker-compose.yml                945 sha256:2a7bbd69349976e9881cc569a805259d…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> irb_protocol_narrative.md        <span style="text-decoration: underline;">5</span>121 sha256:30954e20453f557ad1e27a652d1d8c56…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> irb_protocol_narrative.qmd       <span style="text-decoration: underline;">5</span>268 sha256:c5e862182a4ea2a463941da591318bed…</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span> preflight_attestation.json       <span style="text-decoration: underline;">2</span>327 sha256:de24052f2313396b94090f87697456ff…</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

@@ -63,6 +63,6 @@ entry <- audit_log_append(tmp_log, res)
 audit_log_verify(tmp_log)
 #> <airgap_audit_verification> [VALID]
 #>   Entries verified: 1
-#>   Chain head hash:  sha256:b3d96ea461dc57acfa62cdf0b156b41078f6229c92dc28fa460a445ceb5648a9
+#>   Chain head hash:  sha256:ce6122c3d0ee149f4cca715494d4549123c9624875fc63df3d4165843c27b223
 unlink(tmp_log)
 ```
